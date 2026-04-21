@@ -1,0 +1,53 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="icon/b-internet-web-browser.svg">icon/internet-web-browser.svg</file>
+        <file alias="icon/b-system-run.svg">icon/system-run.svg</file>
+        <file alias="icon/b-preferences.svg">icon/preferences.svg</file>
+        <file alias="icon/b-network-server.svg">icon/network-server.svg</file>
+        <file alias="icon/b-dialog-question.svg">icon/dialog-question.svg</file>
+        <file alias="icon/b-system-software-update.svg">icon/system-software-update.svg</file>
+        <file>icon/material/lock-open-outline.svg</file>
+        <file>icon/material/lock-outline.svg</file>
+        <file>icon/material/cancel.svg</file>
+        <file>icon/material/history.svg</file>
+        <file>icon/material/swap-vertical.svg</file>
+        <file>icon/material/delete.svg</file>
+        <file>icon/material/swap-horizontal.svg</file>
+    </qresource>
+    <qresource prefix="/neko">
+        <file alias="nekobox.png">public/nekobox.png</file>
+        <file>neko.css</file>
+        <file>MaterialSymbolsOutlined.ttf</file>
+        <file>Inter-Regular.ttf</file>
+        <file>Inter-Medium.ttf</file>
+        <file>Inter-SemiBold.ttf</file>
+        <file>Inter-Bold.ttf</file>
+        <file>vpn/vpn-run-root.sh</file>
+        <file>vpn/sing-box-vpn.json</file>
+        <file>dashboard-notice.html</file>
+        <file alias="icons/speed.svg">icons/speed.svg</file>
+        <file alias="icons/dns.svg">icons/dns.svg</file>
+        <file alias="icons/route.svg">icons/route.svg</file>
+        <file alias="icons/settings.svg">icons/settings.svg</file>
+        <file alias="icons/terminal.svg">icons/terminal.svg</file>
+        <file alias="icons/info.svg">icons/info.svg</file>
+        <file alias="icons/remove.svg">icons/remove.svg</file>
+        <file alias="icons/close.svg">icons/close.svg</file>
+        <file alias="icons/check_box_outline_blank.svg">icons/check_box_outline_blank.svg</file>
+        <file alias="icons/content_paste.svg">icons/content_paste.svg</file>
+        <file alias="icons/bolt.svg">icons/bolt.svg</file>
+        <file alias="icons/power_settings_new.svg">icons/power_settings_new.svg</file>
+        <file alias="icons/language.svg">icons/language.svg</file>
+        <file alias="icons/expand_more.svg">icons/expand_more.svg</file>
+        <file alias="icons/drag_indicator.svg">icons/drag_indicator.svg</file>
+        <file alias="icons/add.svg">icons/add.svg</file>
+        <file alias="icons/upload.svg">icons/upload.svg</file>
+        <file alias="icons/download.svg">icons/download.svg</file>
+        <file alias="icons/restart_alt.svg">icons/restart_alt.svg</file>
+        <file alias="icons/edit.svg">icons/edit.svg</file>
+        <file alias="icons/public.svg">icons/public.svg</file>
+        <file alias="icons/shield.svg">icons/shield.svg</file>
+        <file alias="icons/block.svg">icons/block.svg</file>
+        <file alias="mdmbox_about.txt">mdmbox_about.txt</file>
+    </qresource>
+</RCC>
