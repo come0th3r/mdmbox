@@ -259,7 +259,7 @@ void saveTunRuleState() {
         NekoGui::dataStore->routing->Save();
     }
     NekoGui::dataStore->Save();
-    notifyDataStoreChanged(QStringLiteral("UpdateDataStore"));
+    notifyDataStoreChanged(QStringLiteral("UpdateDataStore,RouteChanged,VPNChanged"));
 }
 
 QList<RoutingRuleEntry> collectRoutingRules(int tabIndex) {
@@ -1217,6 +1217,9 @@ void MdmBoxWindow::onOpenAddSubscription() {
 
         if (auto group = NekoGui::profileManager->GetGroup(targetGid)) {
             for (const auto &profile : rawUpdater.updated_order) {
+                if (profile && profile->gid != targetGid) {
+                    NekoGui::profileManager->MoveProfile(profile, targetGid);
+                }
                 if (!group->order.contains(profile->id)) group->order.append(profile->id);
             }
             group->Save();

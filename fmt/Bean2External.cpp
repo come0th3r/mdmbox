@@ -4,6 +4,7 @@
 #include <QFile>
 #include <QDir>
 #include <QFileInfo>
+#include <QCoreApplication>
 #include <QUrl>
 
 #define WriteTempFile(fn, data)                                   \
@@ -20,6 +21,31 @@
     auto TempFile = QFileInfo(f).absoluteFilePath();
 
 namespace NekoGui_fmt {
+    namespace {
+        QString resolveExternalCorePath(const QString &core) {
+            auto configured = NekoGui::dataStore->extraCore->Get(core).trimmed();
+            if (!configured.isEmpty() && QFileInfo::exists(configured)) return configured;
+
+            if (core.compare("xray", Qt::CaseInsensitive) != 0) return configured;
+
+            const QStringList candidates = {
+                QDir(QCoreApplication::applicationDirPath()).filePath("xray.exe"),
+                QDir(QCoreApplication::applicationDirPath()).filePath("xray\\xray.exe"),
+                QDir::current().filePath("xray.exe"),
+            };
+
+            for (const auto &candidate: candidates) {
+                QFileInfo info(candidate);
+                if (!info.exists() || !info.isFile()) continue;
+                const auto absolute = info.absoluteFilePath();
+                NekoGui::dataStore->extraCore->Set(core, absolute);
+                return absolute;
+            }
+
+            return configured;
+        }
+    } // namespace
+
     // -1: Cannot use this config
     // 0: Internal
     // 1: Mapping External
@@ -221,7 +247,7 @@ namespace NekoGui_fmt {
     }
 
     ExternalBuildResult CustomBean::BuildExternal(int mapping_port, int socks_port, int external_stat) {
-        ExternalBuildResult result{NekoGui::dataStore->extraCore->Get(core)};
+        ExternalBuildResult result{resolveExternalCorePath(core)};
 
         result.arguments = command; // TODO split?
 

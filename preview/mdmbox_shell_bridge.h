@@ -26,6 +26,8 @@ public slots:
     void routingImportClipboard(int tabIndex);
     void routingExportConfig();
     void routingResetRules(int tabIndex);
+    void clearLogs();
+    void exportLogs();
     void minimizeWindow();
     void maximizeWindow();
     void closeWindow();

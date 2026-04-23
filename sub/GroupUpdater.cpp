@@ -9,6 +9,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QUrlQuery>
 
 #ifndef NKR_NO_YAML
@@ -75,6 +76,359 @@ namespace {
             if (value.isObject()) return value.toObject();
         }
         return {};
+    }
+
+    bool isPlainProxyType(const QString &type) {
+        const auto normalized = type.trimmed().toLower();
+        return normalized == "socks" || normalized == "socks5" ||
+               normalized == "http" || normalized == "ss" ||
+               normalized == "ssr" || normalized == "shadowsocks" ||
+               normalized == "vmess" || normalized == "vless" ||
+               normalized == "trojan" || normalized == "hysteria2" ||
+               normalized == "tuic";
+    }
+
+    bool isFullConfigObject(const QJsonObject &object) {
+        const auto outboundsValue = object.value("outbounds");
+        if (!outboundsValue.isArray()) return false;
+        if (object.contains("inbounds") || object.contains("routing") || object.contains("dns") || object.contains("log")) {
+            return true;
+        }
+
+        const auto outbounds = outboundsValue.toArray();
+        if (outbounds.size() <= 1) return false;
+
+        int plainProxyCount = 0;
+        for (const auto &item: outbounds) {
+            if (!item.isObject()) continue;
+            if (isPlainProxyType(jsonString(item.toObject().value("type")))) {
+                ++plainProxyCount;
+            }
+        }
+        return plainProxyCount > 1;
+    }
+
+    bool isXrayFullConfigObject(const QJsonObject &object) {
+        if (!isFullConfigObject(object)) return false;
+        const auto outbounds = object.value("outbounds").toArray();
+        for (const auto &item: outbounds) {
+            if (!item.isObject()) continue;
+            if (!jsonString(item.toObject().value("protocol")).trimmed().isEmpty()) return true;
+        }
+        return false;
+    }
+
+    QJsonObject selectPrimaryOutbound(const QJsonObject &object) {
+        const auto outbounds = object.value("outbounds").toArray();
+        for (const auto &item: outbounds) {
+            if (!item.isObject()) continue;
+            const auto outbound = item.toObject();
+            const auto type = jsonString(outbound.value("type")).trimmed().toLower();
+            if (type == "direct" || type == "block" || type == "dns" || type == "selector" || type == "urltest") continue;
+            if (!jsonString(outbound.value("server")).trimmed().isEmpty() ||
+                !jsonString(outbound.value("address")).trimmed().isEmpty() ||
+                !jsonString(outbound.value("add")).trimmed().isEmpty() ||
+                !jsonString(outbound.value("host")).trimmed().isEmpty()) {
+                return outbound;
+            }
+        }
+        return {};
+    }
+
+    QJsonObject selectPrimaryXrayOutbound(const QJsonObject &object) {
+        const auto outbounds = object.value("outbounds").toArray();
+        for (const auto &item: outbounds) {
+            if (!item.isObject()) continue;
+            const auto outbound = item.toObject();
+            const auto protocol = jsonString(outbound.value("protocol")).trimmed().toLower();
+            if (protocol == "freedom" || protocol == "blackhole" || protocol == "dns") continue;
+            if (!protocol.isEmpty()) return outbound;
+        }
+        return {};
+    }
+
+    bool isXrayXhttpOutbound(const QJsonObject &outbound) {
+        const auto streamSettings = outbound.value("streamSettings").toObject();
+        return jsonString(streamSettings.value("network")).trimmed().compare("xhttp", Qt::CaseInsensitive) == 0;
+    }
+
+    QString normalizeXrayOutbound(const QString &tag) {
+        const auto normalized = tag.trimmed().toLower();
+        if (normalized == "direct" || normalized == "freedom" || normalized == "bypass") return QStringLiteral("bypass");
+        if (normalized == "block" || normalized == "blackhole" || normalized == "reject") return QStringLiteral("block");
+        return QStringLiteral("proxy");
+    }
+
+    QJsonObject makeXrayDomainRule(const QJsonArray &domains) {
+        QJsonArray geosite;
+        QJsonArray domain_keyword;
+        QJsonArray domain_suffix;
+        QJsonArray domain_regex;
+        QJsonArray domain_full;
+
+        for (const auto &itemValue: domains) {
+            auto item = jsonString(itemValue).trimmed();
+            if (item.isEmpty()) continue;
+            if (item.startsWith("geosite:")) {
+                geosite += item.mid(QStringLiteral("geosite:").size());
+            } else if (item.startsWith("full:")) {
+                domain_full += item.mid(QStringLiteral("full:").size()).toLower();
+            } else if (item.startsWith("domain:")) {
+                domain_suffix += item.mid(QStringLiteral("domain:").size()).toLower();
+            } else if (item.startsWith("regexp:")) {
+                domain_regex += item.mid(QStringLiteral("regexp:").size()).toLower();
+            } else if (item.startsWith("keyword:")) {
+                domain_keyword += item.mid(QStringLiteral("keyword:").size()).toLower();
+            } else {
+                domain_suffix += item.toLower();
+            }
+        }
+
+        QJsonObject rule;
+        if (!domain_full.isEmpty()) rule["domain"] = domain_full;
+        if (!domain_suffix.isEmpty()) rule["domain_suffix"] = domain_suffix;
+        if (!domain_keyword.isEmpty()) rule["domain_keyword"] = domain_keyword;
+        if (!domain_regex.isEmpty()) rule["domain_regex"] = domain_regex;
+        if (!geosite.isEmpty()) rule["geosite"] = geosite;
+        return rule;
+    }
+
+    QJsonObject makeXrayIpRule(const QJsonArray &ips) {
+        QJsonArray ip_cidr;
+        QJsonArray geoip;
+        for (const auto &itemValue: ips) {
+            auto item = jsonString(itemValue).trimmed();
+            if (item.isEmpty()) continue;
+            if (item.startsWith("geoip:")) {
+                geoip += item.mid(QStringLiteral("geoip:").size());
+            } else {
+                ip_cidr += item;
+            }
+        }
+
+        QJsonObject rule;
+        if (!ip_cidr.isEmpty()) rule["ip_cidr"] = ip_cidr;
+        if (!geoip.isEmpty()) rule["geoip"] = geoip;
+        return rule;
+    }
+
+    QJsonObject convertXrayRuleToSingRule(const QJsonObject &xrayRule) {
+        QJsonObject rule;
+        if (xrayRule.contains("domain")) {
+            const auto domainRule = makeXrayDomainRule(xrayRule.value("domain").toArray());
+            for (auto it = domainRule.constBegin(); it != domainRule.constEnd(); ++it) rule[it.key()] = it.value();
+        }
+        if (xrayRule.contains("ip")) {
+            const auto ipRule = makeXrayIpRule(xrayRule.value("ip").toArray());
+            for (auto it = ipRule.constBegin(); it != ipRule.constEnd(); ++it) rule[it.key()] = it.value();
+        }
+        if (xrayRule.contains("protocol")) {
+            QJsonArray protocols;
+            for (const auto &item: xrayRule.value("protocol").toArray()) {
+                auto value = jsonString(item).trimmed().toLower();
+                if (!value.isEmpty()) protocols += value;
+            }
+            if (!protocols.isEmpty()) rule["protocol"] = protocols;
+        }
+        if (xrayRule.contains("port")) rule["port"] = xrayRule.value("port");
+        if (xrayRule.contains("sourcePort")) rule["source_port"] = xrayRule.value("sourcePort");
+        if (xrayRule.contains("network")) rule["network"] = xrayRule.value("network");
+
+        const auto outboundTag = normalizeXrayOutbound(jsonString(xrayRule.value("outboundTag")));
+        if (!outboundTag.isEmpty()) rule["outbound"] = outboundTag;
+        return rule;
+    }
+
+    QJsonObject buildXrayCustomConfig(const QJsonObject &object) {
+        QJsonArray rules;
+        const auto routing = object.value("routing").toObject();
+        for (const auto &item: routing.value("rules").toArray()) {
+            if (!item.isObject()) continue;
+            const auto converted = convertXrayRuleToSingRule(item.toObject());
+            if (!converted.isEmpty()) rules += converted;
+        }
+
+        QJsonObject custom;
+        if (!rules.isEmpty()) {
+            custom["route"] = QJsonObject{
+                {"rules+", rules},
+            };
+        }
+        return custom;
+    }
+
+    QJsonObject buildExternalXrayRuntimeConfig(const QJsonObject &object) {
+        auto config = object;
+
+        auto outbounds = config.value("outbounds").toArray();
+        for (auto i = 0; i < outbounds.size(); ++i) {
+            if (!outbounds[i].isObject()) continue;
+            auto outbound = outbounds[i].toObject();
+            auto streamSettings = outbound.value("streamSettings").toObject();
+            auto realitySettings = streamSettings.value("realitySettings").toObject();
+            if (realitySettings.contains("password") && !realitySettings.contains("publicKey")) {
+                realitySettings["publicKey"] = realitySettings.value("password");
+                realitySettings.remove("password");
+                streamSettings["realitySettings"] = realitySettings;
+                outbound["streamSettings"] = streamSettings;
+                outbounds[i] = outbound;
+            }
+        }
+        config["outbounds"] = outbounds;
+
+        config["log"] = QJsonObject{
+            {"loglevel", firstNonEmpty({
+                             jsonString(object.value("log").toObject().value("loglevel")),
+                             QStringLiteral("warning"),
+                         })},
+        };
+
+        config["inbounds"] = QJsonArray{
+            QJsonObject{
+                {"tag", "mdmbox-socks"},
+                {"protocol", "socks"},
+                {"listen", "127.0.0.1"},
+                {"port", "%socks_port%"},
+                {"settings", QJsonObject{{"udp", true}}},
+                {"sniffing", QJsonObject{
+                                 {"enabled", true},
+                                 {"destOverride", QJsonArray{"http", "tls", "quic"}},
+                             }},
+            },
+        };
+
+        return config;
+    }
+
+    QJsonObject convertXrayOutboundToProxyObject(const QJsonObject &outbound) {
+        QJsonObject proxy;
+        const auto protocol = jsonString(outbound.value("protocol")).trimmed().toLower();
+        if (protocol.isEmpty()) return proxy;
+
+        proxy["type"] = protocol;
+        proxy["tag"] = jsonString(outbound.value("tag"));
+        proxy["name"] = jsonString(outbound.value("tag"));
+
+        const auto settings = outbound.value("settings").toObject();
+        if (protocol == "vless" || protocol == "vmess") {
+            const auto vnextArray = settings.value("vnext").toArray();
+            if (vnextArray.isEmpty() || !vnextArray.first().isObject()) return {};
+            const auto vnext = vnextArray.first().toObject();
+            const auto users = vnext.value("users").toArray();
+            const auto user = (!users.isEmpty() && users.first().isObject()) ? users.first().toObject() : QJsonObject{};
+            proxy["server"] = jsonString(vnext.value("address"));
+            proxy["server_port"] = jsonInt(vnext.value("port"));
+            proxy["uuid"] = firstNonEmpty({jsonString(user.value("id")), jsonString(user.value("uuid"))});
+            proxy["id"] = proxy["uuid"];
+            if (protocol == "vmess") {
+                proxy["alter_id"] = jsonInt(user.value("alterId"), jsonInt(user.value("alter_id")));
+                proxy["security"] = firstNonEmpty({jsonString(user.value("security")), jsonString(user.value("encryption"))});
+            } else {
+                proxy["flow"] = jsonString(user.value("flow"));
+            }
+        } else if (protocol == "trojan") {
+            const auto servers = settings.value("servers").toArray();
+            if (servers.isEmpty() || !servers.first().isObject()) return {};
+            const auto server = servers.first().toObject();
+            proxy["server"] = jsonString(server.value("address"));
+            proxy["server_port"] = jsonInt(server.value("port"));
+            proxy["password"] = jsonString(server.value("password"));
+            proxy["flow"] = jsonString(server.value("flow"));
+        } else if (protocol == "shadowsocks") {
+            const auto servers = settings.value("servers").toArray();
+            if (servers.isEmpty() || !servers.first().isObject()) return {};
+            const auto server = servers.first().toObject();
+            proxy["server"] = jsonString(server.value("address"));
+            proxy["server_port"] = jsonInt(server.value("port"));
+            proxy["method"] = firstNonEmpty({jsonString(server.value("method")), jsonString(server.value("cipher"))});
+            proxy["password"] = jsonString(server.value("password"));
+        } else if (protocol == "socks" || protocol == "http") {
+            const auto servers = settings.value("servers").toArray();
+            if (servers.isEmpty() || !servers.first().isObject()) return {};
+            const auto server = servers.first().toObject();
+            proxy["server"] = jsonString(server.value("address"));
+            proxy["server_port"] = jsonInt(server.value("port"));
+            proxy["username"] = jsonString(server.value("user"));
+            proxy["password"] = jsonString(server.value("pass"));
+        } else {
+            return {};
+        }
+
+        const auto streamSettings = outbound.value("streamSettings").toObject();
+        const auto network = jsonString(streamSettings.value("network")).trimmed();
+        if (!network.isEmpty()) proxy["network"] = network;
+
+        QJsonObject tlsObject;
+        const auto security = jsonString(streamSettings.value("security")).trimmed().toLower();
+        if (security == "tls" || security == "reality") {
+            tlsObject["enabled"] = true;
+            const auto tlsSettings = streamSettings.value("tlsSettings").toObject();
+            const auto realitySettings = streamSettings.value("realitySettings").toObject();
+            const auto serverName = firstNonEmpty({
+                jsonString(realitySettings.value("serverName")),
+                jsonString(tlsSettings.value("serverName")),
+            });
+            if (!serverName.isEmpty()) tlsObject["server_name"] = serverName;
+            if (jsonBool(tlsSettings.value("allowInsecure"))) tlsObject["insecure"] = true;
+            if (tlsSettings.value("alpn").isArray()) tlsObject["alpn"] = tlsSettings.value("alpn").toArray();
+
+            const auto fingerprint = firstNonEmpty({
+                jsonString(realitySettings.value("fingerprint")),
+                jsonString(tlsSettings.value("fingerprint")),
+            });
+            if (!fingerprint.isEmpty()) {
+                tlsObject["utls"] = QJsonObject{
+                    {"fingerprint", fingerprint},
+                };
+            }
+
+            if (security == "reality") {
+                const auto publicKey = firstNonEmpty({
+                    jsonString(realitySettings.value("publicKey")),
+                    jsonString(realitySettings.value("password")),
+                });
+                tlsObject["reality"] = QJsonObject{
+                    {"public_key", publicKey},
+                    {"short_id", jsonString(realitySettings.value("shortId"))},
+                };
+            }
+        }
+        if (!tlsObject.isEmpty()) proxy["tls"] = tlsObject;
+
+        QJsonObject transport;
+        if (network == "ws") {
+            transport["type"] = "ws";
+            const auto ws = streamSettings.value("wsSettings").toObject();
+            if (!jsonString(ws.value("path")).isEmpty()) transport["path"] = jsonString(ws.value("path"));
+            if (ws.value("headers").isObject()) transport["headers"] = ws.value("headers").toObject();
+        } else if (network == "http" || network == "h2") {
+            transport["type"] = "http";
+            const auto http = streamSettings.value("httpSettings").toObject();
+            if (!jsonString(http.value("path")).isEmpty()) transport["path"] = jsonString(http.value("path"));
+            if (http.value("host").isArray()) transport["host"] = http.value("host").toArray();
+        } else if (network == "grpc") {
+            transport["type"] = "grpc";
+            const auto grpc = streamSettings.value("grpcSettings").toObject();
+            transport["service_name"] = firstNonEmpty({
+                jsonString(grpc.value("serviceName")),
+                jsonString(grpc.value("service_name")),
+            });
+        } else if (network == "xhttp") {
+            transport["type"] = "xhttp";
+            const auto xhttp = streamSettings.value("xhttpSettings").toObject();
+            if (!jsonString(xhttp.value("path")).isEmpty()) transport["path"] = jsonString(xhttp.value("path"));
+            if (!jsonString(xhttp.value("host")).isEmpty()) transport["host"] = jsonString(xhttp.value("host"));
+        }
+        if (!transport.isEmpty()) proxy["transport"] = transport;
+
+        if (outbound.value("mux").isObject()) {
+            const auto mux = outbound.value("mux").toObject();
+            proxy["multiplex"] = QJsonObject{
+                {"enabled", jsonBool(mux.value("enabled"))},
+            };
+        }
+
+        return proxy;
     }
 
     void copyJsonCommonFields(const std::shared_ptr<NekoGui::ProxyEntity> &ent, const QJsonObject &proxy) {
@@ -252,6 +606,105 @@ namespace NekoGui_sub {
             rawUpdater->updated_order += ent;
         }
 
+        std::shared_ptr<NekoGui::ProxyEntity> parseJsonProxyObject(const QJsonObject &proxy);
+
+        std::shared_ptr<NekoGui::ProxyEntity> parseJsonFullConfigObject(const QJsonObject &object) {
+            if (!isFullConfigObject(object)) return nullptr;
+
+            if (isXrayFullConfigObject(object)) {
+                const auto primaryOutbound = selectPrimaryXrayOutbound(object);
+                if (primaryOutbound.isEmpty()) return nullptr;
+
+                const auto proxyObject = convertXrayOutboundToProxyObject(primaryOutbound);
+                if (proxyObject.isEmpty()) return nullptr;
+
+                if (isXrayXhttpOutbound(primaryOutbound)) {
+                    auto ent = NekoGui::ProfileManager::NewProxyEntity("custom");
+                    if (ent->bean == nullptr || ent->bean->version == -114514) return nullptr;
+
+                    auto bean = ent->CustomBean();
+                    bean->core = "xray";
+                    bean->command = {"-c", "%config%"};
+                    bean->config_suffix = "json";
+                    bean->config_simple = QString::fromUtf8(QJsonDocument(buildExternalXrayRuntimeConfig(object)).toJson(QJsonDocument::Compact));
+
+                    ent->bean->name = firstNonEmpty({
+                        jsonString(object.value("remarks")),
+                        jsonString(primaryOutbound.value("tag")),
+                        jsonString(proxyObject.value("name")),
+                    });
+                    ent->bean->serverAddress = firstNonEmpty({
+                        jsonString(proxyObject.value("server")),
+                        jsonString(proxyObject.value("address")),
+                    });
+                    ent->bean->serverPort = jsonInt(proxyObject.value("server_port"),
+                                                    jsonInt(proxyObject.value("port")));
+
+                    if (ent->bean->name.trimmed().isEmpty()) {
+                        ent->bean->name = QObject::tr("Imported Xray profile");
+                    }
+
+                    return ent;
+                }
+
+                auto ent = parseJsonProxyObject(proxyObject);
+                if (ent == nullptr) return nullptr;
+
+                ent->bean->name = firstNonEmpty({
+                    jsonString(object.value("remarks")),
+                    ent->bean->name,
+                    jsonString(primaryOutbound.value("tag")),
+                });
+
+                const auto customConfig = buildXrayCustomConfig(object);
+                if (!customConfig.isEmpty()) {
+                    ent->bean->custom_config = QString::fromUtf8(QJsonDocument(customConfig).toJson(QJsonDocument::Compact));
+                }
+
+                return ent;
+            }
+
+            auto ent = NekoGui::ProfileManager::NewProxyEntity("custom");
+            if (ent->bean == nullptr || ent->bean->version == -114514) return nullptr;
+
+            auto bean = ent->CustomBean();
+            bean->core = "internal-full";
+            bean->config_simple = QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact));
+
+            ent->bean->name = firstNonEmpty({
+                jsonString(object.value("remarks")),
+                jsonString(object.value("name")),
+                jsonString(object.value("tag")),
+            });
+
+            const auto primaryOutbound = selectPrimaryOutbound(object);
+            if (!primaryOutbound.isEmpty()) {
+                if (ent->bean->name.trimmed().isEmpty()) {
+                    ent->bean->name = firstNonEmpty({
+                        jsonString(primaryOutbound.value("tag")),
+                        jsonString(primaryOutbound.value("name")),
+                        jsonString(primaryOutbound.value("remarks")),
+                    });
+                }
+
+                ent->bean->serverAddress = firstNonEmpty({
+                    jsonString(primaryOutbound.value("server")),
+                    jsonString(primaryOutbound.value("address")),
+                    jsonString(primaryOutbound.value("add")),
+                    jsonString(primaryOutbound.value("host")),
+                    ent->bean->serverAddress,
+                });
+                ent->bean->serverPort = jsonInt(primaryOutbound.value("server_port"),
+                                                jsonInt(primaryOutbound.value("port"), ent->bean->serverPort));
+            }
+
+            if (ent->bean->name.trimmed().isEmpty()) {
+                ent->bean->name = QObject::tr("Imported JSON profile");
+            }
+
+            return ent;
+        }
+
         std::shared_ptr<NekoGui::ProxyEntity> parseJsonProxyObject(const QJsonObject &proxy) {
             auto type = jsonString(proxy.value("type")).trimmed().toLower();
             if (type == "ss" || type == "ssr") type = "shadowsocks";
@@ -361,6 +814,61 @@ namespace NekoGui_sub {
             return trimmed.startsWith("{") || trimmed.startsWith("[") || trimmed.contains('\n') || trimmed.contains("://") || trimmed.contains("proxies:");
         }
 
+        bool looksLikeHtmlWrapper(const QString &value) {
+            auto trimmed = value.trimmed();
+            return trimmed.startsWith("<!DOCTYPE html", Qt::CaseInsensitive) ||
+                   trimmed.startsWith("<html", Qt::CaseInsensitive) ||
+                   trimmed.contains("<body", Qt::CaseInsensitive) ||
+                   trimmed.contains("<div", Qt::CaseInsensitive);
+        }
+
+        QString extractSubscriptionUrlFromHtml(const QString &html) {
+            static const QRegularExpression subLinkRegex(
+                R"(<div[^>]*id\s*=\s*["']subLink["'][^>]*>\s*([^<]+?)\s*</div>)",
+                QRegularExpression::CaseInsensitiveOption);
+            static const QRegularExpression jsonUrlRegex(
+                R"(https?://[^\s"'<>]+\.json(?:\?[^\s"'<>]*)?)",
+                QRegularExpression::CaseInsensitiveOption);
+
+            auto match = subLinkRegex.match(html);
+            if (match.hasMatch()) return match.captured(1).trimmed();
+
+            match = jsonUrlRegex.match(html);
+            if (match.hasMatch()) return match.captured(0).trimmed();
+
+            return {};
+        }
+
+        QString extractConfigLinksFromHtml(const QString &html) {
+            QStringList payloads;
+
+            static const QRegularExpression configDivRegex(
+                R"(<div[^>]*class\s*=\s*["'][^"']*\bconfig-code\b[^"']*["'][^>]*>(.*?)</div>)",
+                QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
+            static const QRegularExpression schemeRegex(
+                R"((?:vless|vmess|trojan|ss|socks5|socks4a?|socks|http|https|naive\+[a-z0-9+.-]+|hysteria2|hy2|tuic)://[^\s<>"']+)",
+                QRegularExpression::CaseInsensitiveOption);
+
+            auto matchIt = configDivRegex.globalMatch(html);
+            while (matchIt.hasNext()) {
+                auto block = matchIt.next().captured(1);
+                block.replace(QRegularExpression(R"(<br\s*/?>)", QRegularExpression::CaseInsensitiveOption), "\n");
+                block.remove(QRegularExpression(R"(<[^>]+>)", QRegularExpression::CaseInsensitiveOption));
+                block.replace("&amp;", "&");
+                block.replace("&quot;", "\"");
+                block.replace("&#39;", "'");
+
+                auto schemeIt = schemeRegex.globalMatch(block);
+                while (schemeIt.hasNext()) {
+                    auto payload = schemeIt.next().captured(0).trimmed();
+                    if (!payload.isEmpty()) payloads << payload;
+                }
+            }
+
+            payloads.removeDuplicates();
+            return payloads.join('\n');
+        }
+
         bool updateFromJsonValue(NekoGui_sub::RawUpdater *rawUpdater, const QJsonValue &value, int depth) {
             if (depth > 8) return false;
 
@@ -381,6 +889,12 @@ namespace NekoGui_sub {
 
             if (!value.isObject()) return false;
             const auto object = value.toObject();
+
+            auto fullConfigEnt = parseJsonFullConfigObject(object);
+            if (fullConfigEnt != nullptr) {
+                appendParsedEntity(rawUpdater, fullConfigEnt, false);
+                return true;
+            }
 
             bool handled = false;
             for (const auto &key: QStringList{"links", "uris", "urls", "data", "servers", "proxies", "outbounds", "nodes"}) {
@@ -904,6 +1418,25 @@ namespace NekoGui_sub {
 
             content = resp.data;
             sub_user_info = NetworkRequestHelper::GetHeader(resp.header, "Subscription-UserInfo");
+
+            if (looksLikeHtmlWrapper(content)) {
+                const auto extractedSubscriptionUrl = extractSubscriptionUrlFromHtml(content);
+                if (!extractedSubscriptionUrl.isEmpty() && extractedSubscriptionUrl != _str.trimmed()) {
+                    auto nestedResp = NetworkRequestHelper::HttpGet(extractedSubscriptionUrl);
+                    if (nestedResp.error.isEmpty() && !nestedResp.data.trimmed().isEmpty()) {
+                        content = nestedResp.data;
+                        if (group != nullptr) group->url = extractedSubscriptionUrl;
+                        auto nestedUserInfo = NetworkRequestHelper::GetHeader(nestedResp.header, "Subscription-UserInfo");
+                        if (!nestedUserInfo.isEmpty()) sub_user_info = nestedUserInfo;
+                    } else {
+                        auto extractedLinks = extractConfigLinksFromHtml(content);
+                        if (!extractedLinks.isEmpty()) content = extractedLinks;
+                    }
+                } else {
+                    auto extractedLinks = extractConfigLinksFromHtml(content);
+                    if (!extractedLinks.isEmpty()) content = extractedLinks;
+                }
+            }
 
             MW_show_log("<<<<<<<< " + QObject::tr("Subscription request fininshed: %1").arg(groupName));
         }

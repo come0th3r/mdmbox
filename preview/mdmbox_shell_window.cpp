@@ -9,6 +9,7 @@
 #include <QClipboard>
 #include <QComboBox>
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -194,6 +195,56 @@ QJsonObject buildShellState() {
     return state;
 }
 
+QString formatBytes(qint64 bytes) {
+    static const QStringList units = {QStringLiteral("B"), QStringLiteral("KB"), QStringLiteral("MB"), QStringLiteral("GB")};
+    double value = static_cast<double>(qMax<qint64>(bytes, 0));
+    int unitIndex = 0;
+    while (value >= 1024.0 && unitIndex < units.size() - 1) {
+        value /= 1024.0;
+        ++unitIndex;
+    }
+    return unitIndex == 0
+        ? QString::number(static_cast<qint64>(value)) + QStringLiteral(" ") + units[unitIndex]
+        : QString::number(value, 'f', value >= 10.0 ? 1 : 2) + QStringLiteral(" ") + units[unitIndex];
+}
+
+QString formatUptime(qint64 seconds) {
+    const qint64 hours = seconds / 3600;
+    const qint64 minutes = (seconds % 3600) / 60;
+    const qint64 secs = seconds % 60;
+    return QStringLiteral("%1:%2:%3")
+        .arg(hours, 2, 10, QLatin1Char('0'))
+        .arg(minutes, 2, 10, QLatin1Char('0'))
+        .arg(secs, 2, 10, QLatin1Char('0'));
+}
+
+QJsonObject buildLogsState() {
+    QJsonObject state;
+    auto *mw = GetMainWindow();
+    const QString rawLog = mw ? mw->shellLogText() : QString();
+    const QStringList rawLines = lines(rawLog);
+
+    QJsonArray lineItems;
+    int errorCount = 0;
+    for (const QString &line : rawLines) {
+        const QString trimmed = line.trimmed();
+        if (trimmed.isEmpty()) continue;
+        lineItems.append(trimmed);
+        const QString lower = trimmed.toLower();
+        if (lower.contains(QStringLiteral("error")) || lower.contains(QStringLiteral("[error]")) || lower.contains(QStringLiteral("failed"))) {
+            ++errorCount;
+        }
+    }
+
+    static const QDateTime startedAt = QDateTime::currentDateTime();
+    state.insert(QStringLiteral("lines"), lineItems);
+    state.insert(QStringLiteral("total"), lineItems.size());
+    state.insert(QStringLiteral("errors"), errorCount);
+    state.insert(QStringLiteral("size"), formatBytes(rawLog.toUtf8().size()));
+    state.insert(QStringLiteral("uptime"), formatUptime(startedAt.secsTo(QDateTime::currentDateTime())));
+    return state;
+}
+
 QJsonArray buildServerList() {
     QJsonArray servers;
     auto group = NekoGui::profileManager ? NekoGui::profileManager->CurrentGroup() : nullptr;
@@ -315,7 +366,7 @@ void saveTunRuleState() {
         NekoGui::dataStore->routing->Save();
     }
     NekoGui::dataStore->Save();
-    if (MW_dialog_message) MW_dialog_message(QString(), QStringLiteral("UpdateDataStore"));
+    if (MW_dialog_message) MW_dialog_message(QString(), QStringLiteral("UpdateDataStore,RouteChanged,VPNChanged"));
 }
 
 QList<RoutingRuleEntry> collectRoutingRules(int tabIndex) {
@@ -611,36 +662,6 @@ void MdmBoxShellWindow::hookPage() {
                   return;
                 }
 
-                if (text.includes("Подключ")) {
-                  ev.preventDefault();
-                  window.mdmboxBridge.connectToggle();
-                  return;
-                }
-
-                if (text.includes("Добавить подписку") || text.includes("Вставить ссылку")) {
-                  ev.preventDefault();
-                  window.mdmboxBridge.importClipboard();
-                  return;
-                }
-
-                if (text.includes("Добавить правило")) {
-                  ev.preventDefault();
-                  window.mdmboxBridge.routingAddRule(window.__mdmboxRouteTab || 0);
-                  return;
-                }
-
-                if (text.includes("Импорт списка")) {
-                  ev.preventDefault();
-                  window.mdmboxBridge.routingImportClipboard(window.__mdmboxRouteTab || 0);
-                  return;
-                }
-
-                if (text.includes("Экспорт конфига")) {
-                  ev.preventDefault();
-                  window.mdmboxBridge.routingExportConfig();
-                  return;
-                }
-
                 if (text.includes("Сбросить правила")) {
                   ev.preventDefault();
                   window.mdmboxBridge.routingResetRules(window.__mdmboxRouteTab || 0);
@@ -674,6 +695,7 @@ QString MdmBoxShellWindow::buildRefreshScript() const {
     const QString state = QString::fromUtf8(QJsonDocument(buildShellState()).toJson(QJsonDocument::Compact));
     const QString servers = QString::fromUtf8(QJsonDocument(buildServersState()).toJson(QJsonDocument::Compact));
     const QString routing = QString::fromUtf8(QJsonDocument(buildRoutingState()).toJson(QJsonDocument::Compact));
+    const QString logs = QString::fromUtf8(QJsonDocument(buildLogsState()).toJson(QJsonDocument::Compact));
     const QString page = QString::fromUtf8(QJsonDocument(QJsonArray{currentPage}).toJson(QJsonDocument::Compact));
 
     return QStringLiteral(
@@ -684,21 +706,25 @@ QString MdmBoxShellWindow::buildRefreshScript() const {
                "const state=%1;"
                "const servers=%2;"
                "const routing=%3;"
-               "const page=%4[0];"
-               "%5"
+               "const logs=%4;"
+               "const page=%5[0];"
                "%6"
                "%7"
                "%8"
+               "%9"
+               "%10"
                "normalizeShellChrome();"
                "if(page==='dashboard')setDashboardState();"
                "if(page==='servers')setServersState();"
                "if(page==='routing')setRoutingState();"
+               "if(page==='logs')setLogsState();"
                "})();")
-        .arg(state, servers, routing, page,
+        .arg(state, servers, routing, logs, page,
              buildChromeNormalizeScript(),
              buildDashboardScript(),
              buildServersScript(),
-             buildRoutingScript());
+             buildRoutingScript(),
+             buildLogsScript());
 }
 
 QString MdmBoxShellWindow::buildChromeNormalizeScript() const {
@@ -1112,6 +1138,14 @@ QString MdmBoxShellWindow::buildServersScript() const {
             });
             if (textNode) textNode.textContent = 'Вставить ссылку';
             else actionButton.textContent = 'Вставить ссылку';
+            if (!actionButton.dataset.mdmboxImportBound) {
+              actionButton.dataset.mdmboxImportBound = '1';
+              actionButton.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                window.mdmboxBridge.importClipboard();
+              });
+            }
           }
 
           const host = document.querySelector('div.flex.gap-2.mb-6.border-b.border-slate-100.pb-2');
@@ -1374,6 +1408,149 @@ QString MdmBoxShellWindow::buildRoutingScript() const {
     )JS");
 }
 
+QString MdmBoxShellWindow::buildLogsScript() const {
+    return QStringLiteral(R"JS(
+        function mdmboxEscapeHtml(value) {
+          return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        }
+
+        function mdmboxLogKind(line) {
+          const lower = String(line || '').toLowerCase();
+          if (lower.includes('error') || lower.includes('[error]') || lower.includes('failed')) return 'error';
+          if (lower.includes('warn')) return 'warn';
+          if (lower.includes('debug')) return 'debug';
+          if (lower.includes('success') || lower.includes('started') || lower.includes('listening')) return 'success';
+          return 'info';
+        }
+
+        function mdmboxParseLogLine(line) {
+          const trimmed = String(line || '').trim();
+          const timeMatch = trimmed.match(/^(\d{1,2}:\d{2}:\d{2})\s+(.*)$/);
+          let timestamp = '';
+          let message = trimmed;
+          if (timeMatch) {
+            timestamp = timeMatch[1];
+            message = timeMatch[2];
+          }
+          const levelMatch = message.match(/^\[([A-Za-z]+)\]\s*(.*)$/);
+          let level = '';
+          if (levelMatch) {
+            level = levelMatch[1].toUpperCase();
+            message = levelMatch[2];
+          } else {
+            const kind = mdmboxLogKind(trimmed);
+            level = kind === 'error' ? 'ERROR' : kind === 'warn' ? 'WARN' : kind === 'debug' ? 'DEBU' : 'INFO';
+          }
+          return { timestamp: timestamp || '--:--:--', level: level, message: message, kind: mdmboxLogKind(trimmed) };
+        }
+
+        function setLogsState() {
+          const container =
+            document.querySelector('main > div.flex-1.p-6.overflow-hidden.flex.flex-col') ||
+            document.querySelector('main > div.flex-1') ||
+            document.querySelector('main .flex-1');
+          if (!container || !logs) return;
+
+          const signature = JSON.stringify({
+            total: logs.total || 0,
+            errors: logs.errors || 0,
+            size: logs.size || '',
+            uptime: logs.uptime || '',
+            last: logs.lines && logs.lines.length ? logs.lines[logs.lines.length - 1] : ''
+          });
+          if (container.dataset.mdmboxLogsSig === signature) return;
+          container.dataset.mdmboxLogsSig = signature;
+          container.style.width = '100%';
+          container.style.maxWidth = '100%';
+          container.style.minWidth = '0';
+          container.style.boxSizing = 'border-box';
+          container.style.display = 'flex';
+          container.style.flexDirection = 'column';
+          container.style.height = '100%';
+          container.style.padding = '24px';
+          container.style.overflow = 'hidden';
+
+          const renderedLines = (logs.lines || []).map(function (raw) {
+            const line = mdmboxParseLogLine(raw);
+            const palette =
+              line.kind === 'error' ? { level: 'text-red-500', text: 'text-red-200', row: 'bg-red-500/10 border-l-2 border-red-500 -mx-4 px-4' } :
+              line.kind === 'warn' ? { level: 'text-amber-400', text: 'text-slate-200', row: '' } :
+              line.kind === 'debug' ? { level: 'text-purple-400', text: 'text-slate-500 italic', row: '' } :
+              line.kind === 'success' ? { level: 'text-emerald-400', text: 'text-emerald-100/80', row: '' } :
+              { level: 'text-blue-400', text: 'text-slate-300', row: '' };
+            return '' +
+              '<div class="flex gap-4 mb-1 group ' + palette.row + '">' +
+                '<span class="text-slate-600 shrink-0">' + mdmboxEscapeHtml(line.timestamp) + '</span>' +
+                '<span class="' + palette.level + ' font-bold w-12 shrink-0">' + mdmboxEscapeHtml(line.level) + '</span>' +
+                '<span class="' + palette.text + ' whitespace-pre-wrap break-all">' + mdmboxEscapeHtml(line.message) + '</span>' +
+              '</div>';
+          }).join('');
+
+          container.innerHTML =
+            '<div class="flex items-center justify-between mb-4 shrink-0">' +
+              '<div class="flex items-center gap-2">' +
+                '<h2 class="text-xl font-bold tracking-tight">Системный журнал</h2>' +
+                '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 uppercase">Live</span>' +
+              '</div>' +
+              '<div class="flex gap-2">' +
+                '<button data-mdmbox-clear-logs="1" class="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold bg-white border border-slate-200 rounded-md hover:bg-slate-50 transition-all shadow-sm">' +
+                  '<span class="material-symbols-outlined text-sm">delete_sweep</span>Очистить' +
+                '</button>' +
+                '<button data-mdmbox-export-logs="1" class="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold bg-white border border-slate-200 rounded-md hover:bg-slate-50 transition-all shadow-sm">' +
+                  '<span class="material-symbols-outlined text-sm">download</span>Экспорт' +
+                '</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="flex-1 min-h-0 w-full bg-slate-950 rounded-xl shadow-2xl border border-slate-800 overflow-hidden flex flex-col">' +
+              '<div class="px-4 py-2 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">' +
+                '<div class="flex gap-4">' +
+                  '<div class="flex items-center gap-1.5">' +
+                    '<div class="w-2 h-2 rounded-full ' + ((logs.total || 0) > 0 ? 'bg-emerald-500' : 'bg-slate-500') + '"></div>' +
+                    '<span class="text-[10px] font-mono text-slate-400 uppercase tracking-widest">' + ((logs.total || 0) > 0 ? 'Connected' : 'Idle') + '</span>' +
+                  '</div>' +
+                  '<div class="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Buffer: ' + String(logs.total || 0) + '</div>' +
+                '</div>' +
+                '<div class="flex items-center gap-3">' +
+                  '<span class="text-[10px] font-mono text-slate-500">Auto-scroll</span>' +
+                  '<div class="w-8 h-4 bg-blue-600 rounded-full relative"><div class="absolute right-1 top-1 w-2 h-2 bg-white rounded-full"></div></div>' +
+                '</div>' +
+              '</div>' +
+              '<div data-mdmbox-log-output="1" class="flex-1 min-h-[280px] p-4 overflow-y-auto console-font text-[13px] leading-relaxed custom-scrollbar bg-slate-950/50">' +
+                (renderedLines || '<div class=\"text-slate-500 text-sm\">Логи пока пусты.</div>') +
+              '</div>' +
+            '</div>' +
+            '<div class="mt-4 grid grid-cols-4 gap-4 w-full shrink-0">' +
+              '<div class="bg-white/50 p-3 rounded-lg border border-slate-200/50 flex flex-col"><span class="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Всего логов</span><span class="text-lg font-semibold tracking-tight">' + String(logs.total || 0) + '</span></div>' +
+              '<div class="bg-white/50 p-3 rounded-lg border border-slate-200/50 flex flex-col"><span class="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Ошибок</span><span class="text-lg font-semibold tracking-tight text-red-500">' + String(logs.errors || 0) + '</span></div>' +
+              '<div class="bg-white/50 p-3 rounded-lg border border-slate-200/50 flex flex-col"><span class="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Размер файла</span><span class="text-lg font-semibold tracking-tight">' + mdmboxEscapeHtml(logs.size || '0 B') + '</span></div>' +
+              '<div class="bg-white/50 p-3 rounded-lg border border-slate-200/50 flex flex-col"><span class="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Аптайм</span><span class="text-lg font-semibold tracking-tight">' + mdmboxEscapeHtml(logs.uptime || '00:00:00') + '</span></div>' +
+            '</div>';
+
+          const output = container.querySelector('[data-mdmbox-log-output="1"]');
+          if (output) output.scrollTop = output.scrollHeight;
+
+          const clearButton = container.querySelector('[data-mdmbox-clear-logs="1"]');
+          if (clearButton) {
+            clearButton.addEventListener('click', function () {
+              window.mdmboxBridge.clearLogs();
+            });
+          }
+
+          const exportButton = container.querySelector('[data-mdmbox-export-logs="1"]');
+          if (exportButton) {
+            exportButton.addEventListener('click', function () {
+              window.mdmboxBridge.exportLogs();
+            });
+          }
+        }
+    )JS");
+}
+
 void MdmBoxShellWindow::refreshPageState() {
     if (!view) return;
     if (currentPage == QStringLiteral("dashboard") || currentPage == QStringLiteral("servers")) {
@@ -1385,6 +1562,9 @@ void MdmBoxShellWindow::refreshPageState() {
 void MdmBoxShellWindow::triggerConnectToggle() {
     auto *mw = GetMainWindow();
     if (!mw) return;
+    if (connectToggleInFlight) return;
+    connectToggleInFlight = true;
+    QTimer::singleShot(1500, this, [this] { connectToggleInFlight = false; });
 
     if (NekoGui::dataStore->started_id >= 0) {
         mw->neko_stop();
@@ -1662,6 +1842,30 @@ void MdmBoxShellWindow::triggerRoutingResetRules(int tabIndex) {
     }
 
     refreshPageState();
+}
+
+void MdmBoxShellWindow::triggerClearLogs() {
+    if (auto *mw = GetMainWindow()) {
+        mw->shellClearLogs();
+    }
+    refreshPageState();
+}
+
+void MdmBoxShellWindow::triggerExportLogs() {
+    auto *mw = GetMainWindow();
+    if (!mw) return;
+
+    const QString path = QFileDialog::getSaveFileName(this, tr("Экспорт логов"), QStringLiteral("mdmbox-logs.txt"), tr("Text files (*.txt);;All files (*.*)"));
+    if (path.isEmpty()) return;
+
+    QFile file(path);
+    if (!file.open(QFile::WriteOnly | QFile::Truncate | QFile::Text)) {
+        QMessageBox::warning(this, tr("Экспорт логов"), tr("Не удалось сохранить файл."));
+        return;
+    }
+
+    file.write(mw->shellLogText().toUtf8());
+    file.close();
 }
 
 void MdmBoxShellWindow::triggerExitProgram() {

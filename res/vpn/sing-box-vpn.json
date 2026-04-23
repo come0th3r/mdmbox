@@ -47,7 +47,9 @@
                     "nekoray_core",
                     "nekoray_core.exe",
                     "nekobox_core",
-                    "nekobox_core.exe"
+                    "nekobox_core.exe",
+                    "xray",
+                    "xray.exe"
                 ],
                 "server": "dns-direct"
             },
@@ -136,7 +138,9 @@
                     "nekoray_core",
                     "nekoray_core.exe",
                     "nekobox_core",
-                    "nekobox_core.exe"
+                    "nekobox_core.exe",
+                    "xray",
+                    "xray.exe"
                 ],
                 "outbound": "direct"
             }

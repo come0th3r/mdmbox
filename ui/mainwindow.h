@@ -77,6 +77,10 @@ public:
 
     [[nodiscard]] QJsonObject shellSignalStats() const;
 
+    [[nodiscard]] QString shellLogText() const;
+
+    void shellClearLogs();
+
     void shellMaybeScheduleSignalProbe();
 
 signals:

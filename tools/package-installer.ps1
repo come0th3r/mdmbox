@@ -34,6 +34,7 @@ $isccCandidates = @(
 )
 $exePath = Join-Path $BuildDir "mdmbox.exe"
 $corePath = Join-Path $BuildDir "nekobox_core.exe"
+$xrayPath = Join-Path $BuildDir "xray.exe"
 
 if (-not (Test-Path $exePath)) {
     throw "GUI binary not found: $exePath"
@@ -65,8 +66,11 @@ New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 
 Copy-Item $exePath $stageDir -Force
 Copy-Item $corePath $stageDir -Force
+if (Test-Path $xrayPath) {
+    Copy-Item $xrayPath $stageDir -Force
+}
 
-foreach ($file in @("geoip.db", "geosite.db", "fa_IR.qm", "ru_RU.qm", "zh_CN.qm")) {
+foreach ($file in @("geoip.db", "geosite.db", "geoip.dat", "geosite.dat", "fa_IR.qm", "ru_RU.qm", "zh_CN.qm")) {
     $src = Join-Path $BuildDir $file
     if (Test-Path $src) {
         Copy-Item $src $stageDir -Force

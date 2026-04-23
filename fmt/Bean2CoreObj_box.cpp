@@ -5,7 +5,7 @@ namespace NekoGui_fmt {
     void V2rayStreamSettings::BuildStreamSettingsSingBox(QJsonObject *outbound) {
         // https://sing-box.sagernet.org/configuration/shared/v2ray-transport
 
-        if (network != "tcp") {
+        if (network != "tcp" && network != "raw") {
             QString sb_network = network;
             if (sb_network == "xhttp") sb_network = "httpupgrade";
 

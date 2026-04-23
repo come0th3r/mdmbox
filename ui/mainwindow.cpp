@@ -602,6 +602,15 @@ QJsonObject MainWindow::shellSignalStats() const {
     };
 }
 
+QString MainWindow::shellLogText() const {
+    return qvLogDocument ? qvLogDocument->toPlainText() : QString();
+}
+
+void MainWindow::shellClearLogs() {
+    if (qvLogDocument) qvLogDocument->clear();
+    if (ui && ui->masterLogBrowser) ui->masterLogBrowser->clear();
+}
+
 void MainWindow::shellMaybeScheduleSignalProbe() {
     if (!NekoGui::dataStore || NekoGui::dataStore->started_id < 0) return;
     if (shell_signal_probe_in_flight) return;

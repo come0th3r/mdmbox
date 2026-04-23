@@ -73,6 +73,10 @@ Thumbs.db
 /nekoray
 /build
 /dist
+/BUILD_CONTEXT.md
+/_backup*/
+/build_debug.bat
+/res/*.zip
 CMakeLists.txt.user*
 /cmake-build-*
 /build-*

@@ -208,6 +208,39 @@ Invoke-Step "Fetch geo assets" {
     }
 }
 
+Invoke-Step "Fetch xray-core" {
+    try {
+        $xrayZip = Join-Path $buildDir "xray.zip"
+        $xrayExtract = Join-Path $buildDir "xray_extract"
+
+        Remove-Item -Force $xrayZip -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force $xrayExtract -ErrorAction SilentlyContinue
+
+        Invoke-WebDownload -Url "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-windows-64.zip" -OutFile $xrayZip
+        Expand-Archive -Path $xrayZip -DestinationPath $xrayExtract -Force
+
+        $xrayExe = Get-ChildItem -Path $xrayExtract -Recurse -File -Filter "xray.exe" | Select-Object -First 1
+        if (-not $xrayExe) {
+            throw "xray.exe not found in downloaded archive"
+        }
+
+        Copy-Item -Force $xrayExe.FullName (Join-Path $buildDir "xray.exe")
+        Get-Item (Join-Path $buildDir "xray.exe") | Select-Object FullName, Length, LastWriteTime
+    } catch {
+        Write-Warning "xray-core download skipped: $($_.Exception.Message)"
+    }
+}
+
+Invoke-Step "Fetch xray geo assets" {
+    try {
+        Invoke-WebDownload -Url "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat" -OutFile (Join-Path $buildDir "geosite.dat")
+        Invoke-WebDownload -Url "https://github.com/v2fly/geoip/releases/latest/download/geoip.dat" -OutFile (Join-Path $buildDir "geoip.dat")
+        Get-Item (Join-Path $buildDir "geosite.dat"), (Join-Path $buildDir "geoip.dat") | Select-Object FullName, Length, LastWriteTime
+    } catch {
+        Write-Warning "xray geo assets download skipped: $($_.Exception.Message)"
+    }
+}
+
 if (-not $SkipCore) {
     if (-not $go) {
         throw "go.exe not found. Use -SkipCore or install Go."

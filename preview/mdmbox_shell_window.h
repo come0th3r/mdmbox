@@ -34,6 +34,8 @@ public:
     void triggerRoutingImportClipboard(int tabIndex);
     void triggerRoutingExportConfig();
     void triggerRoutingResetRules(int tabIndex);
+    void triggerClearLogs();
+    void triggerExportLogs();
     void triggerExitProgram();
 
 protected:
@@ -47,6 +49,7 @@ private:
     QString buildDashboardScript() const;
     QString buildServersScript() const;
     QString buildRoutingScript() const;
+    QString buildLogsScript() const;
     QString buildRefreshScript() const;
 
     QWebEngineView *view = nullptr;
@@ -55,4 +58,5 @@ private:
     QTimer *refreshTimer = nullptr;
     QString currentPage = QStringLiteral("dashboard");
     bool allowHardClose = false;
+    bool connectToggleInFlight = false;
 };

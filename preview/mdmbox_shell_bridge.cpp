@@ -65,6 +65,14 @@ void MdmBoxShellBridge::routingResetRules(int tabIndex) {
     if (window) window->triggerRoutingResetRules(tabIndex);
 }
 
+void MdmBoxShellBridge::clearLogs() {
+    if (window) window->triggerClearLogs();
+}
+
+void MdmBoxShellBridge::exportLogs() {
+    if (window) window->triggerExportLogs();
+}
+
 void MdmBoxShellBridge::minimizeWindow() {
     if (window) window->showMinimized();
 }
