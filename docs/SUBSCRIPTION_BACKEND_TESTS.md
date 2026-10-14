@@ -267,3 +267,23 @@ with previous result preserved. Genuine downloader unchanged; no TLS bypass.
 Certificate expiry/revocation, proxy/header bounds and HTTPS GroupUpdater → real
 validator → store success remain **NOT RUN**. Regenerate expired fixtures.
 Without both fixture paths, CTest registers only the original two tests.
+
+## Actual GroupUpdater HTTPS refresh — 2026-10-15
+
+Extended production-graph isolated runner with optional TLS fixtures and real
+pinned `mihomo.exe` alongside test executable. Windows build/run **PASS**, exit
+0: `PRODUCTION_GROUP_HTTPS_REAL_CORE_REFRESH_PASS` plus previous **27/27 PASS**.
+Actual GroupUpdater → downloader → persisted identity → real mihomo validation
+→ atomic store runs with no mock transport/validator or HTTP exception.
+
+Four HTTPS requests cover first successful full-source/metadata commit,
+unsupported protocol rejection, denial stub rejection, second successful
+generation with byte-exact previous snapshot. HWID stable across requests;
+legacy profile and group bytes preserved. UA uses genuine build version and
+pinned core; custom path/query retained and duplicate format replaced. Initial
+test assertion used Qt's encoded query accessor; corrected to FullyDecoded,
+then final bounded run passed. No production logic change was needed.
+
+This is synthetic loopback backend integration, not live mikan or GUI/runtime
+E2E. Provider/geodata provisioning, connection/reconnect, OS effects and clean
+VM gates remain **NOT RUN**. Optional run requires unexpired external fixtures.

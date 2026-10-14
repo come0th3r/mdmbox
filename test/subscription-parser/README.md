@@ -29,3 +29,30 @@ It installs no-op log/dialog callbacks normally supplied by MainWindow.
 Verified Windows command uses `-DQT_VERSION_MAJOR=6` explicitly (project default
 is Qt5), `-DCMAKE_POLICY_VERSION_MINIMUM:STRING=3.5`, Qt/dependency prefix,
 Release/Ninja and the test option above. Use a separate build directory.
+
+## Optional actual HTTPS/core/store refresh
+
+Generate external short-lived localhost fixtures using
+`test/subscription-download/tls-test.cnf` (see that runner's README). Place the
+checksum-pinned v1.19.32 binary as `mihomo.exe` beside this test executable,
+never overwrite a different existing binary. Then run:
+
+```powershell
+$env:QT_QPA_PLATFORM = 'offscreen'
+<build-dir>/mdmbox_subscription_parser_test.exe <temp-dir>/test-cert.pem <temp-dir>/test-key.pem
+```
+
+Two arguments enable synthetic HTTPS origin and process-local certificate
+trust. Actual GroupUpdater, downloader, persisted identity, real config-check
+and atomic store execute with no injected transport/validator and no HTTP
+exception. Temporary database is removed on exit. Checks include exact source
+and metadata, genuine build/core UA, preserved path/query and single format,
+stable HWID over four requests, unsupported protocol and denial refusal without
+replacement, second successful generation and byte-exact previous snapshot.
+Legacy profiles/group JSON remain unchanged by refresh. No raw request/HWID
+is printed. Without arguments this optional test does not run.
+
+This proves the production backend path in an isolated entry point, not the
+actual application window, private/live panel, provider cache, VPN connection
+or runtime apply/reconnect. Regenerate expired certificates; no system trust
+or proxy/TUN changes are made.

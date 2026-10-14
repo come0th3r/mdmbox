@@ -6,6 +6,9 @@
 #include <QJsonObject>
 #include <QTemporaryDir>
 #include <QTextStream>
+#ifndef NKR_NO_YAML
+#include "ManagedRefreshFixture.hpp"
+#endif
 
 class WorkingDirectoryGuard {
 public:
@@ -109,6 +112,12 @@ int main(int argc, char **argv) {
                group->info == "synthetic metadata" && group->sub_last_update == 123456789 &&
                !QFile::exists("managed-subscriptions/" + QString::number(group->id) + ".json"))) return 14;
     QTextStream(stdout) << "GROUP_MODE_PERSISTENCE_AND_FAILURE_PRESERVATION_PASS\n";
+#ifndef NKR_NO_YAML
+    if (app.arguments().size() == 3) {
+        if (!testManagedHttpsRefresh(app.arguments()[1], app.arguments()[2], group, unchanged)) return 15;
+        QTextStream(stdout) << "PRODUCTION_GROUP_HTTPS_REAL_CORE_REFRESH_PASS\n";
+    }
+#endif
     QTextStream(stdout) << "SUBSCRIPTION_PARSER_STAGING_PASS checks=" << checks << "\n";
     return 0;
 }
