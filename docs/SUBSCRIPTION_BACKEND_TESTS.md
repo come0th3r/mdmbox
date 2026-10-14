@@ -304,3 +304,19 @@ Windows ordinary Release build **PASS**, backend CTest **1/1 PASS**, pinned-core
 suite **PASS** exit 0. Tests cover simple accepted profile and resource/control
 refusal cases. Most real mikan profiles remain blocked until provisioning and
 projection exist. No connection readiness or protocol coverage is claimed.
+
+## Detached loopback projection — 2026-10-15
+
+Added `projectLoopback`: explicit top-level allowlist, distinct unprivileged
+ports, 64-hex caller token, loopback mixed/controller binding, disabled other
+ports/TUN, no DNS listener or system hosts, silent log and disabled selection/
+FakeIP persistence. Source is unchanged; rules/proxy order retained in a separate
+emitted document. Unknown top-level fields fail closed rather than disappear.
+This projection is intentionally limited, not a general runtime sanitizer:
+nested proxy/DNS options and actual side effects require further review before
+execution. It is not wired to start or refresh and does not provision resources.
+
+Windows ordinary build **PASS**, backend CTest **1/1 PASS**, actual pinned
+mihomo config-check of projected document **PASS** (suite exit 0). Invalid
+ports/token and unknown top-level fields preserve previous projected result.
+Actual listeners/API authentication/data path/shutdown remain **NOT RUN**.

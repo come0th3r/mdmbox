@@ -15,6 +15,7 @@
 #include <QLockFile>
 #include <QTemporaryDir>
 #include <QTextStream>
+#include <yaml-cpp/yaml.h>
 
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
@@ -109,6 +110,29 @@ int main(int argc, char **argv) {
     if (!NekoGui_sub::ManagedProfile::ParseMihomo(dnsDependent, runtimeCandidate, error) ||
         NekoGui_sub::ManagedRuntimePolicy::checkSelfContained(runtimeCandidate, error) || profile.source != source) return 54;
     QTextStream(stdout) << "MANAGED_RUNTIME_RESOURCE_GATE_PASS\n";
+    NekoGui_sub::ManagedProfile projected;
+    if (!NekoGui_sub::ManagedProfile::ParseMihomo(selfContained +
+            "mixed-port: 9999\nport: 8888\nallow-lan: true\nbind-address: '*'\nmode: global\n", runtimeCandidate, error) ||
+        !NekoGui_sub::ManagedRuntimePolicy::projectLoopback(runtimeCandidate, 12345, 12346,
+            QByteArray(64, 'a'), projected, error)) return 55;
+    const auto projectedRoot = YAML::Load(projected.source.toStdString());
+    if (projectedRoot["mixed-port"].as<int>() != 12345 || projectedRoot["port"].as<int>() != 0 ||
+        projectedRoot["allow-lan"].as<bool>() || projectedRoot["tun"]["enable"].as<bool>() ||
+        projectedRoot["bind-address"].as<std::string>() != "127.0.0.1" ||
+        projectedRoot["external-controller"].as<std::string>() != "127.0.0.1:12346" ||
+        projectedRoot["mode"].as<std::string>() != "rule" || projectedRoot["dns"]["listen"].IsDefined() ||
+        projectedRoot["dns"]["use-system-hosts"].as<bool>() ||
+        projected.rules != runtimeCandidate.rules || projected.proxyNames != runtimeCandidate.proxyNames ||
+        runtimeCandidate.source.contains("external-controller")) return 56;
+    const auto projectedBytes = projected.source;
+    if (NekoGui_sub::ManagedRuntimePolicy::projectLoopback(runtimeCandidate, 80, 12346, QByteArray(64, 'a'), projected, error) ||
+        NekoGui_sub::ManagedRuntimePolicy::projectLoopback(runtimeCandidate, 12345, 12345, QByteArray(64, 'a'), projected, error) ||
+        NekoGui_sub::ManagedRuntimePolicy::projectLoopback(runtimeCandidate, 12345, 12346, "bad", projected, error) ||
+        projected.source != projectedBytes) return 57;
+    if (!NekoGui_sub::ManagedProfile::ParseMihomo(selfContained + "future-control: true\n", runtimeCandidate, error) ||
+        NekoGui_sub::ManagedRuntimePolicy::projectLoopback(runtimeCandidate, 12345, 12346, QByteArray(64, 'a'), projected, error) ||
+        projected.source != projectedBytes) return 58;
+    QTextStream(stdout) << "MANAGED_LOOPBACK_PROJECTION_PASS\n";
     QTemporaryDir directory;
     if (!directory.isValid()) return 4;
     const auto identityDirectory = QDir(directory.path()).filePath("identity");
@@ -267,6 +291,7 @@ int main(int argc, char **argv) {
         NekoGui_sub::MihomoValidator::verifyExecutable("missing.exe", error)) return 39;
     if (app.arguments().size() == 2) {
         const auto exe = app.arguments().at(1);
+        if (!NekoGui_sub::MihomoValidator::validate(exe, projected, error)) return 59;
         if (!NekoGui_sub::MihomoValidator::verifyExecutable(exe, error)) return 40;
         QByteArray valid = source;
         valid.replace("rule-providers: {synthetic: {type: file, path: rules/synthetic.yaml}}\n", "");
