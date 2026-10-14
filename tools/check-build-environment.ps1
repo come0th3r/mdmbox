@@ -62,7 +62,7 @@ foreach ($module in @("Qt6", "Qt6Widgets", "Qt6Network", "Qt6Svg", "Qt6LinguistT
     Add-Check $module ([bool]($path -and (Test-Path -LiteralPath $path))) $(if ($path) { $path } else { "Supply -QtRoot or MDMBOX_QT_ROOT pointing to a prebuilt Qt 6 MSVC SDK." })
 }
 
-foreach ($dependency in @("yaml-cpp", "ZXing", "protobuf", "gRPC")) {
+foreach ($dependency in @("yaml-cpp", "ZXing", "protobuf")) {
     $match = $null
     if (Test-Path -LiteralPath $DependencyRoot) {
         $match = Get-ChildItem -LiteralPath $DependencyRoot -Recurse -File -Filter "*config.cmake" |

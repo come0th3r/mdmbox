@@ -1,6 +1,6 @@
 # MDMBOX — Project Memory
 
-Обновлено: **2026-10-14**.
+Обновлено: **2026-10-15**.
 Назначение: восстановить контекст проекта между сессиями. Факты, предложения и результаты проверок ниже разделены.
 
 ## 1. Цель пользователя
@@ -45,6 +45,13 @@
 - Выполнено 14/14 тестов probe — PASS; PowerShell syntax и diff-check — PASS.
 - Проверены живые HEAD и GET uri/clash: HTTP 200; URI-ответ содержит 20 ссылок (16 VLESS, 4 TUIC), Clash candidate — секции proxies/proxy-groups/rules/dns. Это не runtime validation.
 - Preflight: 19 BLOCKED checks; найдены Node.js 24.20.0 и QHotkey, прочие SDK/packages/replacement checkout не найдены в проверенных местах. Baseline build не выполнен.
+- Пользователь предоставил отдельную Windows 11 машину для сборки/тестов. SSH-вход через Bitvise подтверждён; credentials и адрес стенда в памяти не сохраняются. Read-only inventory: Windows build 26100, RAM 16 GiB, 8 logical CPUs, свободно около 85 GiB; Git 2.56.0.windows.2, Go 1.27.2 windows/amd64, Node.js 24.21.0. CMake/Ninja/MSVC не найдены в PATH, Qt/MSVC/CMake — в проверенных стандартных каталогах. Установка SDK и сборка там ещё не выполнялись.
+- Пользователь разрешил установку и настройку стенда; предоставил fallback proxy (секреты не сохранять). Создан отдельный checkout `%USERPROFILE%\mdmbox-build\mdmbox` на `beta-ilya`, восстановлены соседние libneko/sing-box/sing-quic по SHA из плана. На стенде 14/14 тестов probe — PASS. Установлены Scoop CMake 4.4.4 и Ninja 1.13.2 с успешной проверкой хешей. Запущены установка Microsoft Build Tools 2022 (VCTools + recommended, без reboot; перед запуском проверяется подпись Microsoft) и загрузка Qt 6.7.2 MSVC2019 x64 base/WebEngine/WebChannel/Positioning/ShaderTools с HTTPS-зеркала Berkeley (проверка опубликованного SHA1, запись SHA256). Завершение этих двух фоновых задач ещё не подтверждено; не считать SDK установленными до проверки результатов. Qt 6.7.2 — кандидат baseline, не окончательный runtime release pin.
+- Build Tools завершён: exit 0, vswhere 17.14.42, `C:\BuildTools`, reboot не требуется. Проверены MSVC tools 14.44.35207 и Windows SDK 10.0.26100.0: реальная компиляция и запуск C++17 smoke с `windows.h` и WinAPI — PASS. Bootstrap SHA256 `2A6AA7D94E38D457A4EB3930FC60056ECAB06865B2EB925E5275B8473A017583`, подпись Microsoft Valid. Повторный preflight — 12 BLOCKED (Qt, четыре C++ packages, sing checkout). Первый Qt download остановился на timeout checksum qtsvg; запущена повторная задача с retry и инкрементальным manifest. Её завершение ещё не подтверждено; Qt readiness не заявлять.
+- Qt download завершён: все 11 архивов проверены/распакованы, manifest в `mdmbox-build/downloads/qt-6.7.2-manifest.json` на стенде. `Qt/6.7.2/msvc2019_64/bin/qmake -query QT_VERSION` вернул 6.7.2; все семь package presence checks — PASS. Qt compile/WebEngine runtime smoke ещё NOT RUN. Исправляется ложное требование C++ gRPC в preflight: CMake использует только Protobuf (см. `cmake/myproto.cmake`). Запущена сборка yaml-cpp 0.7.0, ZXing 2.0.0, Protobuf 21.4 в отдельных `cpp-sources`/`cpp-built` с manifest source SHA; результат ещё не получен. Для старых CMakeLists под CMake 4 явно передаётся `CMAKE_POLICY_VERSION_MINIMUM=3.5`, без изменения upstream sources.
+- C++ dependency job завершился без ошибки: yaml-cpp/ZXing/Protobuf установлены в `mdmbox-build/cpp-built`, Protobuf v21.4 commit `c9869dc7803eb0a21d7e589c40ff4f9288cd34ae`. Запущена первая GUI-only Release configure/build в отдельном `mdmbox-build/baseline-gui` с Qt и prefix зависимостей; результат ещё не получен. Go core и runtime smoke не выполнены.
+- Первый GUI configure завершился ошибкой: CMake сообщал `CMAKE_POLICY_VERSION_MINIMUM=3` вместо переданных без кавычек `3.5`. Вероятна обработка аргумента PowerShell, не доказанная несовместимость Qt/CMake. Запущен повтор с массивом строк и `'-DCMAKE_POLICY_VERSION_MINIMUM:STRING=3.5'`, с выводом cache entry. Результат пока не получен; Qt configs не модифицировались.
+- Повторный GUI Release configure/build — PASS: cache policy `3.5`, 80/80 steps, source `4ad14e0`, удалённое дерево чистое. `baseline-gui/mdmbox.exe` 15901184 bytes, SHA256 и source dependency SHA записаны в `docs/STAGE0_BASELINE.md`. Runtime, deployment, Go core и чистая VM — NOT RUN. Это не полная baseline-сборка и не завершение этапа 0. Далее согласовать sing replacement, собрать core и подготовить runtime smoke; оформить воспроизводимые scripts.
 
 **Ещё не сделано:** реализация managed subscriptions/mihomo, новая вёрстка, интеграция, baseline build, runtime/E2E/visual tests, beta/stable release. Предлагаемые `SubscriptionService`, `ManagedProfileService`, `CoreManager` и `ui/shell/` — будущие элементы, а не готовый код.
 
@@ -54,6 +61,7 @@
 
 1. Проверить branch/status и перечитать незавершённые пункты этапа 0 в плане.
 2. Проверить установленные Qt/MSVC/CMake/Ninja/Go и сборочные scripts, не запускать разрушительную пересборку до их аудита.
+   Использовать предоставленный удалённый Windows-стенд: SSH уже проверен; следующий шаг — отдельный checkout и полный preflight, затем подготовка недостающих SDK. Не считать стенд чистой VM без проверки.
 3. Сопоставить `go.mod` replacements с `libs/get_source*.sh`; получить и исследовать закреплённые `libneko`, `sing-box`, `sing-quic`, `sing`.
 4. Сделать воспроизводимый bootstrap без чужих абсолютных путей, мутаций manifests во время сборки и отключения проверки Go-модулей.
 5. Выполнить baseline Release build, записать команды/версии/результаты и исходные дефекты. Затем перейти к контрактным fixtures mikan и этапу 1.

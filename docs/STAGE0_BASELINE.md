@@ -52,6 +52,36 @@ node tools/subscription-probe.mjs --help
 
 ## Следующий шаг
 
+### Дополнение: удалённый стенд, 2026-10-15
+
+Пользователь разрешил установку SDK. На отдельном Windows 11 build 26100 стенде подтверждены:
+
+- Build Tools 2022 17.14.42; MSVC tools 14.44.35207, compiler 19.44.35229; Windows SDK 10.0.26100.0. C++17/WinAPI compile-and-run smoke — PASS. Reboot не потребовался.
+- CMake 4.4.4, Ninja 1.13.2, Go 1.27.2, Node.js 24.21.0; автономные тесты probe — 14/14 PASS.
+- Qt 6.7.2 MSVC2019 x64: 11 архивов с HTTPS-зеркала Berkeley проверены по опубликованному SHA1, локальные SHA256 сохранены в manifest на стенде. WebEngine/WebChannel включены; qmake и семь presence checks — PASS.
+- Release static dependency builds — PASS: yaml-cpp 0.7.0 (`0579ae3d976091d7d664aa9d2527e0d0cff25763`), ZXing 2.0.0 (`bdb857efae30f5f2abfcf3d626bf1156dc055bae`), Protobuf 21.4 (`c9869dc7803eb0a21d7e589c40ff4f9288cd34ae`).
+
+**GUI-only Release build — PASS**, source SHA `4ad14e088081a8063f0abb88556357bf10854189`, чистое рабочее дерево на стенде; 80/80 build steps. Получен `baseline-gui/mdmbox.exe`, 15901184 bytes, SHA256 `DE348F296676A83DAEBA6E86870DEBA1178E24F9B7B96777F5F43DBABC68ECBC`.
+
+Команды после импорта x64 VsDevCmd environment; переменные указывают на локальные SDK и отдельные build directories:
+
+```powershell
+$configureArgs = @(
+    '-S', $repo, '-B', $build, '-G', 'Ninja',
+    '-DCMAKE_BUILD_TYPE=Release', '-DQT_VERSION_MAJOR=6',
+    "-DCMAKE_PREFIX_PATH=$qt;$prefix", "-DProtobuf_DIR=$prefix\cmake",
+    '-DCMAKE_POLICY_VERSION_MINIMUM:STRING=3.5'
+)
+& cmake @configureArgs
+& cmake --build $build --parallel 4
+```
+
+Исходный некавыченный аргумент policy version в PowerShell привёл к значению `3` и configure failure; строковый массив исправил ошибку. Qt configs не изменялись. Остались warnings Qt deprecated API/стороннего кода и отсутствующих optional Vulkan headers; они не помешали linking.
+
+В preflight удалено ложное требование C++ gRPC: `cmake/myproto.cmake` требует Protobuf, не gRPC package. Ранее записанные 19/12/5 BLOCKED — исторические результаты прежнего preflight, не текущий статус.
+
+**NOT RUN:** запуск mdmbox/WebEngine, Qt deployment, Go core build, protocol E2E, installer и чистая VM-проверка. GUI-only build не закрывает baseline/release gate этапа 0. Следующие задачи — воспроизводимые scripts, согласование sing replacement, Go build и изолированный runtime smoke без изменения proxy/TUN.
+
 1. Восстановить закреплённые checkout libneko/sing-box/sing-quic; установить происхождение `sing`, которого нет в `libs/get_source_env.sh`, но есть в Go replacements.
 2. Зафиксировать Windows toolchain и checksums SDK/dependency bundles; убрать прежние мутации manifests и персональные пути из build flow.
 3. Выполнить локальный baseline, затем обязательную чистую VM-сборку.
