@@ -217,3 +217,18 @@ shape, malformed pairs/types, invalid counters, duplicate headers, coherent
 roundtrip, failure preservation and missing-metadata compatibility.
 Concurrent Windows read/replace stress and crash/disk-full recovery are still
 **NOT RUN**. No automatic repair or runtime rollback is implied.
+
+## Existing group persistence and production rejection — 2026-10-15
+
+Extended isolated production-graph parser runner: Windows **27/27 PASS**,
+process exit 0. Added group JSON disk roundtrip, old JSON defaulting to links,
+preservation of URL/info/update timestamp/order, unknown-mode rejection and
+managed missing-core preflight rejection through actual GroupUpdater. Existing
+group/profile bytes remain unchanged and no managed envelope is created.
+
+Initial configure needed explicit Qt6 (project defaults to Qt5); test code was
+corrected to use public Group::Load rather than private LoadGroup. First run
+failed because MainWindow log callback was unset in this isolated process;
+runner now installs no-op log/dialog sinks. Final rebuild/run passed.
+Existing offscreen OpenGL and legacy YAML `bad conversion` warnings remain.
+Successful production HTTPS refresh/TLS fixtures and runtime E2E **NOT RUN**.
