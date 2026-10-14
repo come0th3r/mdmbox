@@ -140,3 +140,22 @@ HTTP header integration, true concurrent-process/crash tests, ACL protection,
 reinstall/reset policy and registration with a real mikan panel remain pending.
 Portable data copied to another machine currently retains its identity; any
 explicit rotate action must warn about panel registration/device-slot effects.
+
+## Bounded managed download — 2026-10-15
+
+Added worker-only `SubscriptionDownloader`: strict HTTPS (test target has
+explicit loopback HTTP exception), peer verification, manual redirects,
+4 MiB body cap, 64 KiB reply buffer, deadline and cancellation. Sends supplied
+installation UUID as X-Hwid and Windows device header; does not derive HWID.
+No automatic retry, raw error/body logging or inherited system proxy.
+Failed download/metadata parsing leaves the previous result untouched.
+
+Windows build/CTest **2/2 PASS**: synthetic local HTTP success/header delivery,
+redirect/declared oversized/empty/malformed metadata/403/timeout rejection,
+pre-cancel and in-flight cancellation. Separate target compiled without the
+test exception confirms HTTP loopback rejection in production mode.
+
+HTTPS certificate fixtures, chunked oversize, truncation, other HTTP statuses,
+header memory bounds, proxy policy, approved redirect handling and live mikan
+requests remain **NOT RUN**. Legacy request helper remains unchanged; managed
+refresh/store/metadata integration is next and not available in production yet.
