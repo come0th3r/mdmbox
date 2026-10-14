@@ -32,3 +32,24 @@ remain; no renderer or protocol claim is based on this test.
 See `test/subscription-parser/README.md` for the opt-in build mode. This change
 does **not** make individual legacy JSON writes atomic or reject every partially
 unsupported subscription; managed-profile validation is subsequent work.
+
+## Detached full mihomo document — 2026-10-15
+
+`sub/ManagedProfile.*` is a new standalone backend component. It retains exact
+source bytes and SHA256, ordered proxy/group names and panel rules. DNS,
+providers, unknown transport fields and comments remain in the original
+document, without lossy re-emission or legacy list conversion.
+
+Standalone C++17/Qt6 Core/yaml-cpp build on the baseline Windows toolchain:
+**PASS**. CTest: **1/1 PASS**, with a synthetic full document accepted and
+**14 invalid documents rejected**, prior source/hash preserved. Cases include
+empty/HTML/malformed input, multiple documents, duplicate root/nested keys,
+cyclic aliases, oversized/invalid UTF-8/NUL input, empty sections, conflicting
+proxy/group names, nonscalar rules and malformed providers.
+
+Only structural checks are implemented. The component is not yet wired into
+GroupUpdater or persistent group storage. No complete mikan golden contract,
+denial-stub detection, mihomo subprocess validation or protocol E2E claim is
+made. Provider-only profiles are outside this initial inline mikan contract.
+Traversal bounds apply after YAML parsing; hard parse-time memory/time limits
+still require process isolation or another bounded parsing design.
