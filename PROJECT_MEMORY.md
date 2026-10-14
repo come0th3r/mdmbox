@@ -60,6 +60,8 @@
 
 Последняя проверка data path: добавлен `tools/core-loopback-smoke.mjs`; на стенде Node.js 24.21.0 дважды PASS HTTP inbound → direct outbound → локальный HTTP origin, по одному запросу. Syntax PASS, несуществующий core ожидаемо отклонён с exit 1; повторный успешный запуск PASS. Скрипт использует только synthetic config/loopback, очищает свои процессы/временный каталог, не меняет proxy/TUN/routes. Локально Node по PATH не найден, локальный запуск не выполнен. Внешние VPN-протоколы/RPC/TUN/DNS-политика не проверены. Далее оформить pinned bootstrap/core build и Qt deployment/WebEngine runtime smoke.
 
+Добавлен `tools/build-baseline-core.ps1`: проверка pinned dependency HEAD/diff и exact sing patch blob, разрешённый test overlay, Go 1.27.2, readonly manifests/checksum verification; source preparation отдельно. Первый запуск выявил несколько Go executable в PATH, исправлен выбор первого. Повторная сборка через script PASS, SHA256 совпал с прежним; новый binary loopback PASS. На удалённом checkout 8b06edc теперь скопированы untracked core script и fixture вместе с прежним GUI script: перед обновлением сопоставить с tracked файлами, не удалять вслепую. Далее dependency bootstrap и Qt deployment/runtime; negative provenance checks ещё NOT RUN.
+
 При начале реализации проверено: `beta-ilya` отслеживает `origin/beta-ilya`, HEAD `d124815`, рабочее дерево было чистым, staged diff пустым. Эти значения не заменяют новую проверку git в следующей сессии.
 
 ### Следующая рабочая задача

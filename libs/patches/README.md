@@ -28,3 +28,10 @@ go test -mod=readonly -v ./common/control -run TestMDMBOX -count=1
 
 Both cached IPv4/IPv6 lookup and missing-interface error tests passed.
 The test file is an explicit test overlay, not part of the upstream tag.
+
+After preparing all sibling dependency checkouts, build the Windows core with
+`tools/build-baseline-core.ps1 -OutputFile <absolute-output-path>`. The entry
+point checks dependency HEADs, tracked changes, the exact patched file blob and
+any permitted test overlay before building. It requires Go 1.27.2 windows/amd64
+and preserves application Go manifests. Preparation remains a separate explicit
+operation; this is not an automatic dependency installer.

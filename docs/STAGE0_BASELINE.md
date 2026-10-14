@@ -145,6 +145,25 @@ node tools/core-loopback-smoke.mjs <path-to-nekobox_core.exe>
 **NOT TESTED:** RPC, DNS-политика, VPN-протоколы, TUN и внешние соединения.
 GUI/WebEngine deployment/runtime и clean-VM gate остаются NOT RUN.
 
+### Проверяемый core build entry point
+
+Добавлен `tools/build-baseline-core.ps1 -OutputFile <absolute-path>`.
+Проверяет HEAD всех четырёх sibling dependencies, tracked changes, точный blob
+patched sing и содержимое разрешённого test overlay. Не клонирует, не применяет
+патч и не редактирует manifests. Требует Go 1.27.2 windows/amd64, задаёт явные
+GOOS/GOARCH/tags, отключает workspace и внешние GOFLAGS, включает checksum
+verification; после сборки восстанавливает изменённые переменные окружения и
+проверяет хеши application Go manifests.
+
+Первый запуск выявил ошибку обработки нескольких Go executable в PATH;
+исправлено явным выбором первого результата Get-Command. Повтор на стенде —
+**CORE_BUILD_PASS**, SHA256 совпал с предыдущим core
+`D28E54C410C09981181DEBFED373002ACA49EEFD5E8954D90E52A819665BED31`.
+Новый артефакт прошёл loopback smoke — **PASS**. Исходники приложения не
+изменялись; сборка использовала удалённый checkout 8b06edc плюс явно
+скопированные build script/test fixture. Полный dependency bootstrap и
+негативные тесты проверок provenance пока NOT RUN.
+
 1. Восстановить закреплённые checkout libneko/sing-box/sing-quic; установить происхождение `sing`, которого нет в `libs/get_source_env.sh`, но есть в Go replacements.
 2. Зафиксировать Windows toolchain и checksums SDK/dependency bundles; убрать прежние мутации manifests и персональные пути из build flow.
 3. Выполнить локальный baseline, затем обязательную чистую VM-сборку.
