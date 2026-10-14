@@ -62,6 +62,8 @@
 
 Добавлен `tools/build-baseline-core.ps1`: проверка pinned dependency HEAD/diff и exact sing patch blob, разрешённый test overlay, Go 1.27.2, readonly manifests/checksum verification; source preparation отдельно. Первый запуск выявил несколько Go executable в PATH, исправлен выбор первого. Повторная сборка через script PASS, SHA256 совпал с прежним; новый binary loopback PASS. На удалённом checkout 8b06edc теперь скопированы untracked core script и fixture вместе с прежним GUI script: перед обновлением сопоставить с tracked файлами, не удалять вслепую. Далее dependency bootstrap и Qt deployment/runtime; negative provenance checks ещё NOT RUN.
 
+Qt runtime smoke: самостоятельный `test/webengine-smoke` собран и развёрнут windeployqt в новом каталоге на стенде; запуск без Qt SDK в PATH PASS (`WEBENGINE_LOCAL_HTML_JS_PASS Qt=6.7.2`), sandbox не отключён. Проверены local HTML load и JS, QWebChannel установлен, но roundtrip не проверен. Warnings: NMEA plugin missing Qt6SerialPort.dll, VMware SVGA → LLVMPipe, Vulkan/GPU detection и DPI awareness failed. Полнота deployment/GPU/DPI/visual gates не закрыты; это не запуск MDMBOX и не clean VM. Далее исправить/ограничить deployment dependencies, проверить bridge roundtrip и isolated MDMBOX startup; pinned bootstrap тоже незавершён.
+
 При начале реализации проверено: `beta-ilya` отслеживает `origin/beta-ilya`, HEAD `d124815`, рабочее дерево было чистым, staged diff пустым. Эти значения не заменяют новую проверку git в следующей сессии.
 
 ### Следующая рабочая задача

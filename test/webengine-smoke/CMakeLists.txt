@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.16)
+project(mdmbox_webengine_smoke LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+find_package(Qt6 REQUIRED COMPONENTS Widgets WebEngineWidgets WebChannel)
+add_executable(mdmbox_webengine_smoke main.cpp)
+target_link_libraries(mdmbox_webengine_smoke PRIVATE Qt6::Widgets Qt6::WebEngineWidgets Qt6::WebChannel)

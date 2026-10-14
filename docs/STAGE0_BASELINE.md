@@ -164,6 +164,33 @@ verification; после сборки восстанавливает измен�
 скопированные build script/test fixture. Полный dependency bootstrap и
 негативные тесты проверок provenance пока NOT RUN.
 
+### Qt WebEngine deployment smoke, 2026-10-15
+
+Добавлен самостоятельный C++17 target `test/webengine-smoke` (Qt Widgets,
+WebEngineWidgets, WebChannel). Создаёт временный локальный HTML и off-the-record
+profile, устанавливает QWebChannel, проверяет `loadFinished` и результат
+JavaScript `MDMBOX_LOCAL_HTML:42`. Timeout — 30 секунд; renderer termination и
+ошибки загрузки дают ненулевой exit code. Bridge roundtrip здесь не проверяется.
+
+На стенде MSVC/Qt 6.7.2: configure/build — **PASS**; `windeployqt --release
+--no-translations` в новый отдельный каталог — exit 0. Запуск с PATH только
+Windows/System32 и без Qt plugin/WebEngine overrides — **PASS**, вывод
+`WEBENGINE_LOCAL_HTML_JS_PASS Qt=6.7.2`. Sandbox не отключался.
+
+Предупреждения, которые нельзя скрывать:
+
+- Deployment не нашёл `Qt6SerialPort.dll` для position/NMEA plugin. Текущий
+  HTML smoke его не использует; полноту distribution это не подтверждает.
+- VMware SVGA initialization failed, fallback LLVMPipe, Vulkan instance failed
+  и GPU vendor detection failed. Smoke прошёл на software rendering; GPU/DPI
+  и visual/performance gates остаются NOT RUN.
+- `SetProcessDpiAwarenessContext` failed; соответствие DPI макетам не проверено.
+
+Это **runtime smoke отдельного target**, не запуск MDMBOX, не installer test
+и не clean-Windows gate (на стенде установлен MSVC). Реальный QWebChannel
+roundtrip, WebEngineWidgets view/rendering, комплектность runtime dependencies
+и изолированный запуск MDMBOX остаются следующими задачами.
+
 1. Восстановить закреплённые checkout libneko/sing-box/sing-quic; установить происхождение `sing`, которого нет в `libs/get_source_env.sh`, но есть в Go replacements.
 2. Зафиксировать Windows toolchain и checksums SDK/dependency bundles; убрать прежние мутации manifests и персональные пути из build flow.
 3. Выполнить локальный baseline, затем обязательную чистую VM-сборку.
