@@ -37,6 +37,29 @@ namespace {
         }
         return true;
     }
+
+    // mikan handler.stub at a7b32c3: one notice SOCKS endpoint, one selector, one MATCH.
+    // Do not classify arbitrary loopback proxies or names alone as denial notices.
+    bool denialStub(const YAML::Node &root) {
+        const auto proxies = root["proxies"];
+        const auto groups = root["proxy-groups"];
+        const auto rules = root["rules"];
+        if (!proxies.IsSequence() || proxies.size() != 1 || !groups.IsSequence() || groups.size() != 1 ||
+            !rules.IsSequence() || rules.size() != 1) return false;
+        const auto proxy = proxies[0];
+        const auto group = groups[0];
+        if (!proxy.IsMap() || !group.IsMap()) return false;
+        for (const auto *key : {"name", "type", "server", "port"}) if (!proxy[key].IsScalar()) return false;
+        if (!group["name"].IsScalar() || !group["type"].IsScalar() || !rules[0].IsScalar()) return false;
+        const auto name = QString::fromStdString(proxy["name"].Scalar());
+        const auto members = group["proxies"];
+        return (name.startsWith(QStringLiteral("⛔ ")) || name.startsWith(QStringLiteral("⏸ "))) &&
+               proxy["type"].Scalar() == "socks5" && proxy["server"].Scalar() == "127.0.0.1" &&
+               proxy["port"].Scalar() == "1" && group["type"].Scalar() == "select" &&
+               members.IsSequence() && members.size() == 1 && members[0].IsScalar() &&
+               members[0].Scalar() == proxy["name"].Scalar() &&
+               rules[0].Scalar() == "MATCH," + group["name"].Scalar();
+    }
 }
 
 namespace NekoGui_sub {
@@ -57,6 +80,10 @@ namespace NekoGui_sub {
                 return false;
             }
             const auto root = documents.front();
+            if (denialStub(root)) {
+                error = QStringLiteral("Panel returned a denial or unavailable-server notice, not a working profile");
+                return false;
+            }
             ManagedProfile candidate;
             if (!names(root["proxies"], candidate.proxyNames) || candidate.proxyNames.isEmpty() ||
                 !names(root["proxy-groups"], candidate.groupNames) || candidate.groupNames.isEmpty() ||

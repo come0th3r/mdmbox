@@ -232,3 +232,24 @@ failed because MainWindow log callback was unset in this isolated process;
 runner now installs no-op log/dialog sinks. Final rebuild/run passed.
 Existing offscreen OpenGL and legacy YAML `bad conversion` warnings remain.
 Successful production HTTPS refresh/TLS fixtures and runtime E2E **NOT RUN**.
+
+## mikan denial notices — 2026-10-15
+
+Inspected `internal/panel/subs/handler.go`, `Handler.stub` at upstream revision
+`a7b32c3efdfe85fe2450940f876fbb27fcf11ecc`. Clash notices have one SOCKS5
+127.0.0.1:1 proxy with ⛔/⏸ prefix, one selector referencing it and one MATCH
+rule. They omit DNS, so the previous full-profile requirements already refused
+them generically. Parser now recognizes this compound structure before the
+DNS requirement and returns a content-free notice error, including when DNS
+is added. Neither name alone nor loopback endpoint alone triggers detection.
+
+Windows production Release build **PASS**, backend CTest **1/1 PASS**, genuine
+mihomo integration **PASS** exit 0. Twelve synthetic Russian/English notices
+cover device limit, no suitable servers, banned device, missing HWID and
+temporary/permanent unbinding. Tests assert refusal, unchanged stored envelope
+and acceptance of an otherwise identical ordinary local proxy with DNS.
+
+No distinct denial reason is inferred from translated text. URI/sing-box
+notice paths, denial headers and live panel responses remain **NOT RUN** here.
+Blocked-user/expired/exhausted handling beyond existing metadata checks is not
+claimed. Future upstream notice shape changes require renewed contract tests.

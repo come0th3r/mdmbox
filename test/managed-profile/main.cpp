@@ -137,6 +137,35 @@ int main(int argc, char **argv) {
     if (!QDir().mkdir(otherPath + ".previous") || store.commit(8, updated, accept, error) ||
         readBytes(otherPath) != otherOriginal) return 13;
     QTextStream(stdout) << "MANAGED_PROFILE_STORE_PASS\n";
+    const QStringList notices{
+        QStringLiteral("⛔ Все места для устройств заняты — откройте ссылку подписки в браузере"),
+        QStringLiteral("⛔ All device places are taken — open the subscription link in a browser"),
+        QStringLiteral("⛔ Для этого приложения нет подходящих серверов — откройте ссылку подписки в браузере"),
+        QStringLiteral("⛔ There are no servers this app can use — open the subscription link in a browser"),
+        QStringLiteral("⛔ Устройство заблокировано"), QStringLiteral("⛔ This device is blocked"),
+        QStringLiteral("⛔ Приложение не сообщает ID устройства — поставьте Happ, Koala Clash или INCY"),
+        QStringLiteral("⛔ The app does not send a device ID — install Happ, Koala Clash or INCY"),
+        QStringLiteral("⏸ Устройство отвязано — подключится снова через 2 ч"),
+        QStringLiteral("⏸ This device was unbound — it can connect again in 2 h"),
+        QStringLiteral("⏸ Устройство отвязано — подключить его снова может только администратор"),
+        QStringLiteral("⏸ This device was unbound — only the administrator can let it connect again")};
+    if (!store.commit(11, source, accept, error)) return 47;
+    const auto noticePath = QDir(directory.path()).filePath("11.json");
+    const auto beforeNotice = readBytes(noticePath);
+    for (const auto &notice : notices) {
+        const auto stub = QStringLiteral("proxies: [{name: '%1', type: socks5, server: 127.0.0.1, port: 1}]\n"
+            "proxy-groups: [{name: custom-main, type: select, proxies: ['%1']}]\n"
+            "rules: ['MATCH,custom-main']\n").arg(notice).toUtf8();
+        if (NekoGui_sub::ManagedProfile::ParseMihomo(stub, profile, error) ||
+            !error.contains("notice") || store.commit(11, stub, accept, error) ||
+            readBytes(noticePath) != beforeNotice) return 48;
+        // Adding DNS must not make the notice acceptable; normal local proxies remain valid.
+        if (NekoGui_sub::ManagedProfile::ParseMihomo(stub + "dns: {}\n", profile, error)) return 49;
+        auto ordinary = stub + "dns: {}\n";
+        ordinary.replace(notice.toUtf8(), "local-test");
+        if (!NekoGui_sub::ManagedProfile::ParseMihomo(ordinary, profile, error)) return 50;
+    }
+    QTextStream(stdout) << "MIKAN_DENIAL_NOTICE_PASS cases=" << notices.size() << "\n";
     NekoGui_sub::SubscriptionMetadata serviceMetadata;
     serviceMetadata.title = "Synthetic service";
     serviceMetadata.upload = quint64(4294967296);
