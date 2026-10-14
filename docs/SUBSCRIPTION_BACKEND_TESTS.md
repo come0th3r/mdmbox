@@ -320,3 +320,18 @@ Windows ordinary build **PASS**, backend CTest **1/1 PASS**, actual pinned
 mihomo config-check of projected document **PASS** (suite exit 0). Invalid
 ports/token and unknown top-level fields preserve previous projected result.
 Actual listeners/API authentication/data path/shutdown remain **NOT RUN**.
+
+## Nested execution contract — 2026-10-15
+
+Loopback projection now checks nested options: first execution candidate is
+SOCKS5 with scalar name/server/port/credentials/UDP, select groups referencing
+proxies or DIRECT/REJECT (no group cycles), simple IP nameservers and reviewed
+DNS/profile fields only. Unknown proxy options, other protocols, active health
+checks, nested group references, URL resolvers, hosts and extra DNS controls
+are refused rather than stripped. Stored subscription acceptance is unchanged.
+IPv4 lexical check is not address validation; real config-check is mandatory.
+
+Windows production build **PASS**, backend CTest **1/1 PASS**, real projected
+mihomo config-check **PASS** exit 0. Eight negative nested-option cases preserve
+the previous projection. This restricted contract is not broad mikan protocol
+support or an OS sandbox. Actual start/API/data path/shutdown still **NOT RUN**.

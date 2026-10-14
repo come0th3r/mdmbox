@@ -86,6 +86,7 @@ int main(int argc, char **argv) {
     QTextStream(stdout) << "MANAGED_PROFILE_STRUCTURE_PASS rejected=" << rejected << "\n";
     auto selfContained = source;
     selfContained.replace("rule-providers: {synthetic: {type: file, path: rules/synthetic.yaml}}\n", "");
+    selfContained.replace(", future-field: keep", "");
     NekoGui_sub::ManagedProfile runtimeCandidate;
     if (!NekoGui_sub::ManagedProfile::ParseMihomo(selfContained, runtimeCandidate, error) ||
         !NekoGui_sub::ManagedRuntimePolicy::checkSelfContained(runtimeCandidate, error)) return 51;
@@ -133,6 +134,22 @@ int main(int argc, char **argv) {
         NekoGui_sub::ManagedRuntimePolicy::projectLoopback(runtimeCandidate, 12345, 12346, QByteArray(64, 'a'), projected, error) ||
         projected.source != projectedBytes) return 58;
     QTextStream(stdout) << "MANAGED_LOOPBACK_PROJECTION_PASS\n";
+    for (const auto &replacement : QList<QPair<QByteArray, QByteArray>>{
+             {"type: socks5", "type: socks5, dialer-proxy: node"},
+             {"type: socks5", "type: socks5, interface-name: synthetic"},
+             {"type: socks5", "type: socks5, future-field: keep"},
+             {"type: socks5", "type: http"},
+             {"type: select", "type: url-test, url: https://example.invalid/check"},
+             {"proxies: [node, DIRECT]", "proxies: [select]"},
+             {"nameserver: [127.0.0.1]", "nameserver: ['https://example.invalid/dns-query']"},
+             {"nameserver: [127.0.0.1]", "nameserver: [127.0.0.1], proxy-server-nameserver: [127.0.0.1]"}}) {
+        auto nested = selfContained;
+        nested.replace(replacement.first, replacement.second);
+        if (nested == selfContained || !NekoGui_sub::ManagedProfile::ParseMihomo(nested, runtimeCandidate, error) ||
+            NekoGui_sub::ManagedRuntimePolicy::projectLoopback(runtimeCandidate, 12345, 12346,
+                QByteArray(64, 'a'), projected, error) || projected.source != projectedBytes) return 60;
+    }
+    QTextStream(stdout) << "MANAGED_NESTED_RUNTIME_GATE_PASS\n";
     QTemporaryDir directory;
     if (!directory.isValid()) return 4;
     const auto identityDirectory = QDir(directory.path()).filePath("identity");

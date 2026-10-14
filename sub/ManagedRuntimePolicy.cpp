@@ -3,6 +3,52 @@
 #include <QRegularExpression>
 #include <yaml-cpp/yaml.h>
 
+namespace {
+    bool onlyKeys(const YAML::Node &node, const QSet<QString> &allowed) {
+        if (!node.IsMap()) return false;
+        for (const auto &entry : node) {
+            if (!entry.first.IsScalar() || !allowed.contains(QString::fromStdString(entry.first.Scalar()))) return false;
+        }
+        return true;
+    }
+
+    // Deliberately narrow first execution contract, not protocol capability detection.
+    bool reviewedNestedOptions(const YAML::Node &root) {
+        for (const auto &proxy : root["proxies"]) {
+            if (!onlyKeys(proxy, {"name", "type", "server", "port", "username", "password", "udp"}) ||
+                proxy["type"].Scalar() != "socks5" || !proxy["server"].IsScalar() || !proxy["port"].IsScalar()) return false;
+            for (const auto &entry : proxy) if (!entry.second.IsScalar()) return false;
+        }
+        QSet<QString> targets{"DIRECT", "REJECT"};
+        for (const auto &proxy : root["proxies"]) targets.insert(QString::fromStdString(proxy["name"].Scalar()));
+        // No group-to-group references yet: avoid selector cycles before lifecycle is implemented.
+        for (const auto &group : root["proxy-groups"]) {
+            if (!onlyKeys(group, {"name", "type", "proxies"}) || group["type"].Scalar() != "select" ||
+                !group["proxies"].IsSequence() || group["proxies"].size() == 0) return false;
+            for (const auto &member : group["proxies"]) {
+                if (!member.IsScalar() || !targets.contains(QString::fromStdString(member.Scalar()))) return false;
+            }
+        }
+        if (!onlyKeys(root["dns"], {"enable", "ipv6", "nameserver", "default-nameserver", "listen"})) return false;
+        for (const auto &entry : root["dns"]) {
+            const auto key = entry.first.Scalar();
+            if (key == "nameserver" || key == "default-nameserver") {
+                if (!entry.second.IsSequence()) return false;
+                for (const auto &server : entry.second) {
+                    if (!server.IsScalar()) return false;
+                    // Initial smoke resolves with plain IP resolvers only: no URL/file/group directives.
+                    static const QRegularExpression ipv4(QStringLiteral("^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$"));
+                    if (!ipv4.match(QString::fromStdString(server.Scalar())).hasMatch()) return false;
+                }
+            } else if (!entry.second.IsScalar()) return false;
+        }
+        if (root["hosts"].IsDefined()) return false;
+        if (root["profile"].IsDefined() &&
+            !onlyKeys(root["profile"], {"store-selected", "store-fake-ip"})) return false;
+        return true;
+    }
+}
+
 namespace NekoGui_sub {
     bool ManagedRuntimePolicy::projectLoopback(const ManagedProfile &profile, int mixedPort, int controllerPort,
                                                const QByteArray &apiToken, ManagedProfile &result, QString &error) {
@@ -16,6 +62,10 @@ namespace NekoGui_sub {
         if (!checkSelfContained(profile, error)) return false;
         try {
             auto root = YAML::Load(profile.source.toStdString());
+            if (!reviewedNestedOptions(root)) {
+                error = QStringLiteral("Nested options are outside the initial SOCKS/select runtime contract");
+                return false;
+            }
             const QSet<QString> allowed{
                 "proxies", "proxy-groups", "rules", "dns", "hosts", "profile",
                 "mixed-port", "port", "socks-port", "redir-port", "tproxy-port", "allow-lan",
