@@ -74,6 +74,10 @@ Isolated startup observation завершена: новые client-startup-deplo
 
 ### Следующая рабочая задача
 
+Последнее указание пользователя: продолжать самостоятельно, спрашивать только о существенных решениях. Приоритет — backend подписок до новой Figma UI; незакрытые stage-0 gates не объявлять выполненными.
+
+После `deb5d09`: RawUpdater получил detached staging mode; GroupUpdater сначала разбирает ответ без записи и отклоняет пустой/ошибочный результат до удаления профилей или изменения metadata/URL. Исправлено сохранение совпавшего профиля с индексом 0. Это ранняя защита от потери данных, НЕ полная транзакция: individual JSON writes, core validation, partial unsupported imports, concurrency/crash rollback остаются. Opt-in parser regression runner с временной БД на Windows: 22/22 checks PASS, process exit 0; production entry point build после отключения test option PASS. Snapshot QHotkey copy, cwd cleanup и PowerShell exit-code observation исправлены после выявленных сбоев тестового harness. Исходный remote checkout не менялся. Warnings offscreen OpenGL и legacy YAML bad conversion остаются. Далее full managed-profile model/storage + mihomo validation; GroupUpdater empty-response guard нуждается в end-to-end update тесте, не только parser staging.
+
 1. Проверить branch/status и перечитать незавершённые пункты этапа 0 в плане.
 2. Проверить установленные Qt/MSVC/CMake/Ninja/Go и сборочные scripts, не запускать разрушительную пересборку до их аудита.
    Использовать предоставленный удалённый Windows-стенд: SSH уже проверен; следующий шаг — отдельный checkout и полный preflight, затем подготовка недостающих SDK. Не считать стенд чистой VM без проверки.

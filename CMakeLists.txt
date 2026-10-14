@@ -246,6 +246,12 @@ set(PROJECT_SOURCES
 )
 
 # Qt exe
+option(MDMBOX_SUBSCRIPTION_PARSER_TEST "Build isolated legacy subscription parser regression runner" OFF)
+if (MDMBOX_SUBSCRIPTION_PARSER_TEST)
+    list(REMOVE_ITEM PROJECT_SOURCES main/main.cpp)
+    list(APPEND PROJECT_SOURCES test/subscription-parser/main.cpp)
+endif ()
+
 if (${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(${NKR_APP_TARGET}
             MANUAL_FINALIZATION
@@ -280,6 +286,12 @@ set_target_properties(${NKR_APP_TARGET} PROPERTIES
         OUTPUT_NAME ${NKR_APP_OUTPUT_NAME}
         PDB_NAME ${NKR_APP_OUTPUT_NAME}
 )
+if (MDMBOX_SUBSCRIPTION_PARSER_TEST)
+    set_target_properties(${NKR_APP_TARGET} PROPERTIES
+            WIN32_EXECUTABLE FALSE
+            OUTPUT_NAME mdmbox_subscription_parser_test
+            PDB_NAME mdmbox_subscription_parser_test)
+endif ()
 
 # Target Source Translations
 
@@ -309,7 +321,7 @@ target_link_libraries(${NKR_APP_TARGET} PRIVATE
         ${PLATFORM_LIBRARIES}
 )
 
-if (WIN32 AND MSVC)
+if (WIN32 AND MSVC AND NOT MDMBOX_SUBSCRIPTION_PARSER_TEST)
     target_link_options(${NKR_APP_TARGET} PRIVATE "/MANIFESTUAC:level='requireAdministrator' uiAccess='false'")
 endif ()
 

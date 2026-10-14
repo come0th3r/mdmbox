@@ -9,6 +9,11 @@ namespace NekoGui_sub {
 
         void update(const QString &str);
 
+        // Subscription updates parse into detached entities before touching storage.
+        void append(const std::shared_ptr<NekoGui::ProxyEntity> &ent);
+        bool stage_only = false;
+        bool parse_failed = false;
+
         int gid_add_to = -1; // 导入到指定组 -1 为当前选中组
 
         QList<std::shared_ptr<NekoGui::ProxyEntity>> updated_order; // 新增的配置，按照导入时处理的先后排序

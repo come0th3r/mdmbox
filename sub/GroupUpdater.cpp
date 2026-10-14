@@ -602,8 +602,7 @@ namespace NekoGui_sub {
         void appendParsedEntity(NekoGui_sub::RawUpdater *rawUpdater, const std::shared_ptr<NekoGui::ProxyEntity> &ent, bool needFix) {
             if (ent == nullptr) return;
             if (needFix) NekoGui_sub::RawUpdater_FixEnt(ent);
-            NekoGui::profileManager->AddProfile(ent, rawUpdater->gid_add_to);
-            rawUpdater->updated_order += ent;
+            rawUpdater->append(ent);
         }
 
         std::shared_ptr<NekoGui::ProxyEntity> parseJsonProxyObject(const QJsonObject &proxy);
@@ -918,6 +917,11 @@ namespace NekoGui_sub {
         }
     } // namespace
 
+    void RawUpdater::append(const std::shared_ptr<NekoGui::ProxyEntity> &ent) {
+        if (!stage_only) NekoGui::profileManager->AddProfile(ent, gid_add_to);
+        updated_order += ent;
+    }
+
     void RawUpdater::update(const QString &str) {
         // Base64 encoded subscription
         if (auto str2 = DecodeB64IfValid(str); !str2.isEmpty()) {
@@ -1037,8 +1041,7 @@ namespace NekoGui_sub {
         if (needFix) RawUpdater_FixEnt(ent);
 
         // End
-        NekoGui::profileManager->AddProfile(ent, gid_add_to);
-        updated_order += ent;
+        append(ent);
     }
 
 #ifndef NKR_NO_YAML
@@ -1343,10 +1346,11 @@ namespace NekoGui_sub {
                 }
 
                 if (needFix) RawUpdater_FixEnt(ent);
-                NekoGui::profileManager->AddProfile(ent, gid_add_to);
-                updated_order += ent;
+                append(ent);
             }
         } catch (const YAML::Exception &ex) {
+            parse_failed = true;
+            if (stage_only) return; // Do not expose a remote document in a dialog/log.
             runOnUiThread([=] {
                 MessageBoxWarning("YAML Exception", ex.what());
             });
@@ -1397,9 +1401,11 @@ namespace NekoGui_sub {
         NekoGui::dataStore->imported_count = 0;
         auto rawUpdater = std::make_unique<RawUpdater>();
         rawUpdater->gid_add_to = _sub_gid;
+        rawUpdater->stage_only = true;
 
         // 准备
         QString sub_user_info;
+        QString replacement_url;
         bool asURL = _sub_gid >= 0 || _not_sub_as_url; // 把 _str 当作 url 处理（下载内容）
         auto content = _str.trimmed();
         auto group = NekoGui::profileManager->GetGroup(_sub_gid);
@@ -1425,7 +1431,7 @@ namespace NekoGui_sub {
                     auto nestedResp = NetworkRequestHelper::HttpGet(extractedSubscriptionUrl);
                     if (nestedResp.error.isEmpty() && !nestedResp.data.trimmed().isEmpty()) {
                         content = nestedResp.data;
-                        if (group != nullptr) group->url = extractedSubscriptionUrl;
+                        replacement_url = extractedSubscriptionUrl;
                         auto nestedUserInfo = NetworkRequestHelper::GetHeader(nestedResp.header, "Subscription-UserInfo");
                         if (!nestedUserInfo.isEmpty()) sub_user_info = nestedUserInfo;
                     } else {
@@ -1449,11 +1455,19 @@ namespace NekoGui_sub {
         QList<std::shared_ptr<NekoGui::ProxyEntity>> update_del;  // 更新前后都有的，需要删除的新配置
         QList<std::shared_ptr<NekoGui::ProxyEntity>> update_keep; // 更新前后都有的，被保留的旧配置
 
-        // 订阅解析前
+        // Parse first: an empty or malformed response must not erase working data.
+        rawUpdater->update(content);
+        if (rawUpdater->parse_failed || rawUpdater->updated_order.isEmpty()) {
+            MW_show_log(QObject::tr("Subscription/import rejected: no valid replacement profiles; existing data kept."));
+            return;
+        }
+
+        // Legacy storage commit. This is not yet a crash-safe transaction.
         if (group != nullptr) {
             in = group->Profiles();
             group->sub_last_update = QDateTime::currentMSecsSinceEpoch() / 1000;
             group->info = sub_user_info;
+            if (!replacement_url.isEmpty()) group->url = replacement_url;
             group->order.clear();
             group->Save();
             //
@@ -1466,7 +1480,9 @@ namespace NekoGui_sub {
         }
 
         // 解析并添加 profile
-        rawUpdater->update(content);
+        for (const auto &ent: rawUpdater->updated_order) {
+            NekoGui::profileManager->AddProfile(ent, rawUpdater->gid_add_to);
+        }
 
         if (group != nullptr) {
             out_all = group->Profiles();
@@ -1498,7 +1514,7 @@ namespace NekoGui_sub {
                 group->order = {};
                 for (const auto &ent: rawUpdater->updated_order) {
                     auto deleted_index = update_del.indexOf(ent);
-                    if (deleted_index > 0) {
+                    if (deleted_index >= 0) {
                         if (deleted_index >= update_keep.count()) continue; // should not happen
                         auto ent2 = update_keep[deleted_index];
                         group->order.append(ent2->id);
