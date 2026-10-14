@@ -178,3 +178,27 @@ live mikan download followed by real validation in one invocation.
 Production GroupUpdater binding, combined snapshot-read API, metadata
 corruption recovery, denial stubs, scheduler and runtime apply/rollback remain
 pending. No managed connection or complete subscription support claimed.
+
+## Production binding (explicit backend mode) — 2026-10-15
+
+Ordinary YAML-enabled client builds now include managed backend sources.
+Existing group JSON gains `subscription_kind`, default `links`; an explicit
+`mihomo-full` group uses the genuine downloader, identity service, atomic store
+and pinned validator. Unknown kinds are refused rather than sent through the
+legacy importer. Managed updates return before legacy profile deletion or
+group metadata writes. Full source and metadata remain in the managed envelope
+keyed by the existing group ID.
+
+Pinned `mihomo.exe` beside the client is checksum-verified **before** requesting
+the subscription/advertising its version; validation repeats the check. It is
+not automatically downloaded or bundled by this change. There is intentionally
+no UI mode selector yet, and managed runtime remains unavailable. Existing
+legacy profiles are not converted or removed. The build version must satisfy
+the existing version contract; no artificial release version is substituted.
+
+Remote Windows ordinary Release build **PASS**. Standalone backend CTest
+**1/1 PASS**; optional genuine mihomo integration **PASS**, exit 0, including
+the extracted executable-preflight API (valid pin accepted, missing/wrong file
+rejected). This does not exercise GroupUpdater refresh against an HTTPS fixture.
+Group JSON roundtrip/migration, production group refresh, no-YAML build,
+installer inclusion, UI availability and runtime E2E remain **NOT RUN**.

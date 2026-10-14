@@ -11,6 +11,12 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QUrlQuery>
+#include <QCoreApplication>
+
+#ifndef NKR_NO_YAML
+#include "SubscriptionService.hpp"
+#include "MihomoValidator.hpp"
+#endif
 
 #ifndef NKR_NO_YAML
 
@@ -1410,6 +1416,42 @@ namespace NekoGui_sub {
         auto content = _str.trimmed();
         auto group = NekoGui::profileManager->GetGroup(_sub_gid);
         if (group != nullptr && group->archive) return;
+
+        if (group != nullptr && group->subscription_kind == "mihomo-full") {
+#ifndef NKR_NO_YAML
+            // Existing config cwd contains groups/profiles; managed envelopes use the same group IDs.
+            ManagedProfileStore store(QStringLiteral("managed-subscriptions"));
+            const auto executable = QCoreApplication::applicationDirPath() + QStringLiteral("/mihomo.exe");
+            QString error;
+            // Verify the pinned artifact before advertising its version or registering HWID with the panel.
+            if (!MihomoValidator::verifyExecutable(executable, error)) {
+                MW_show_log(QObject::tr("Managed subscription update failed: %1").arg(error));
+                return;
+            }
+            const auto fetch = [](const ManagedSubscriptionRequest &request, const QString &identity,
+                                  SubscriptionDownload &download, QString &error, const std::atomic_bool *cancel) {
+                return SubscriptionDownloader::fetch(request, identity, download, error, cancel);
+            };
+            const auto validate = [&](const ManagedProfile &profile, QString &error) {
+                return MihomoValidator::validate(executable, profile, error);
+            };
+            if (!SubscriptionService::refresh(group->id, QUrl(content), QStringLiteral(NKR_VERSION),
+                                               QStringLiteral("managed-subscriptions"), store, fetch, validate, error)) {
+                MW_show_log(QObject::tr("Managed subscription update failed: %1").arg(error));
+                return;
+            }
+            // The envelope is authoritative; do not perform a second, non-atomic group metadata write.
+            MW_show_log(QObject::tr("Managed profile stored and validated. Managed connection runtime is not available yet."));
+            MW_dialog_message("SubUpdater", "finish-dingyue");
+#else
+            MW_show_log(QObject::tr("Managed subscriptions require YAML support."));
+#endif
+            return;
+        }
+        if (group != nullptr && group->subscription_kind != "links") {
+            MW_show_log(QObject::tr("Unsupported subscription kind; existing data kept."));
+            return;
+        }
 
         // 网络请求
         if (asURL) {

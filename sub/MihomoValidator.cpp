@@ -8,7 +8,7 @@
 #include <QTemporaryDir>
 
 namespace NekoGui_sub {
-    bool MihomoValidator::validate(const QString &executable, const ManagedProfile &profile, QString &error) {
+    bool MihomoValidator::verifyExecutable(const QString &executable, QString &error) {
         error.clear();
         QFile binary(executable);
         if (!QFileInfo(executable).isAbsolute() || !binary.open(QIODevice::ReadOnly)) {
@@ -22,6 +22,11 @@ namespace NekoGui_sub {
             return false;
         }
         binary.close();
+        return true;
+    }
+
+    bool MihomoValidator::validate(const QString &executable, const ManagedProfile &profile, QString &error) {
+        if (!verifyExecutable(executable, error)) return false;
         if (profile.source.isEmpty() || profile.source.size() > 4 * 1024 * 1024) {
             error = QStringLiteral("Invalid managed profile size");
             return false;

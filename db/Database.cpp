@@ -312,6 +312,7 @@ namespace NekoGui {
         _add(new configItem("order", &order, itemType::integerList));
         _add(new configItem("url", &url, itemType::string));
         _add(new configItem("info", &info, itemType::string));
+        _add(new configItem("subscription_kind", &subscription_kind, itemType::string));
         _add(new configItem("lastup", &sub_last_update, itemType::integer64));
         _add(new configItem("manually_column_width", &manually_column_width, itemType::boolean));
         _add(new configItem("column_width", &column_width, itemType::integerList));

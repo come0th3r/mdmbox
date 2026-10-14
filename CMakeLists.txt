@@ -245,6 +245,17 @@ set(PROJECT_SOURCES
         ${QV2RAY_RC}
 )
 
+if (NOT NKR_NO_YAML)
+    list(APPEND PROJECT_SOURCES
+            sub/ManagedProfile.cpp
+            sub/ManagedProfileStore.cpp
+            sub/MihomoValidator.cpp
+            sub/SubscriptionContract.cpp
+            sub/InstallationIdentity.cpp
+            sub/SubscriptionDownloader.cpp
+            sub/SubscriptionService.cpp)
+endif ()
+
 # Qt exe
 option(MDMBOX_SUBSCRIPTION_PARSER_TEST "Build isolated legacy subscription parser regression runner" OFF)
 if (MDMBOX_SUBSCRIPTION_PARSER_TEST)

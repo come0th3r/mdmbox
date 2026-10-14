@@ -12,6 +12,8 @@ namespace NekoGui {
         QString name = "";
         QString url = "";
         QString info = "";
+        // Explicit opt-in; legacy groups keep their existing importer/runtime.
+        QString subscription_kind = "links";
         qint64 sub_last_update = 0;
         int front_proxy_id = -1;
 

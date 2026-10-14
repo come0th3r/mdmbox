@@ -172,8 +172,11 @@ int main(int argc, char **argv) {
         if (!lock.tryLock() || refresh(accept) || readBytes(servicePath) != serviceBytes) return 38;
     }
     QTextStream(stdout) << "SUBSCRIPTION_SERVICE_REFRESH_PASS\n";
+    if (NekoGui_sub::MihomoValidator::verifyExecutable(path, error) ||
+        NekoGui_sub::MihomoValidator::verifyExecutable("missing.exe", error)) return 39;
     if (app.arguments().size() == 2) {
         const auto exe = app.arguments().at(1);
+        if (!NekoGui_sub::MihomoValidator::verifyExecutable(exe, error)) return 40;
         QByteArray valid = source;
         valid.replace("rule-providers: {synthetic: {type: file, path: rules/synthetic.yaml}}\n", "");
         NekoGui_sub::ManagedProfile candidate;
