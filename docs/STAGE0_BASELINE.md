@@ -212,6 +212,29 @@ rendering/Vulkan/DPI повторились; они остаются незак�
 подтверждает synthetic JS → C++ → JS → C++ roundtrip, но не production bridge,
 визуальный вывод, startup MDMBOX или clean-VM deployment.
 
+### Устранение SerialPort deployment warning
+
+Установлен Qt SerialPort из того же Qt 6.7.2 repository package
+`qt.qt6.672.addons.qtserialport.win64_msvc2019_64`, version
+`6.7.2-0-202406110335`. Архив проверен по опубликованному SHA1
+`B1043FD3C0D652C9A646F2C5869FD309C828FC66`; SHA256
+`6BC18CDE624680F57591325EE262328C77A12AC8043867C8D6C3241B06AA544B`.
+Отдельный manifest сохранён на стенде в downloads.
+
+Повторный windeployqt в новом каталоге включил `Qt6SerialPort.dll` для
+`qtposition_nmea.dll`, прежнее missing dependency warning исчезло.
+Первый вызов вне VsDevCmd выдал warnings о dxcompiler/dxil и VCINSTALLDIR;
+повтор после импорта x64 VsDevCmd добавил DXCompiler/DXIL и VC redistributable
+без этих deployment warnings. Наличие `Qt6SerialPort.dll`, `dxcompiler.dll`,
+`dxil.dll`, `vc_redist.x64.exe`, `QtWebEngineProcess.exe` — **PASS**.
+HTML/JS и QWebChannel roundtrip с очищенным SDK PATH — повторно **PASS**.
+
+VMware LLVMPipe/Vulkan/GPU/DPI warnings сохраняются. Наличие redist installer
+не означает проверку его установки на чистой Windows. Это исправление
+конкретного missing dependency, а не аудит всех DLL или release-ready package.
+Запуск самого MDMBOX пока NOT RUN: перед ним проверить startup/shutdown
+side effects, отдельный data directory и отсутствие изменения system proxy.
+
 1. Восстановить закреплённые checkout libneko/sing-box/sing-quic; установить происхождение `sing`, которого нет в `libs/get_source_env.sh`, но есть в Go replacements.
 2. Зафиксировать Windows toolchain и checksums SDK/dependency bundles; убрать прежние мутации manifests и персональные пути из build flow.
 3. Выполнить локальный baseline, затем обязательную чистую VM-сборку.

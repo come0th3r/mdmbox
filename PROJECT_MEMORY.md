@@ -66,6 +66,8 @@ Qt runtime smoke: самостоятельный `test/webengine-smoke` собр
 
 WebEngine smoke расширен Q_OBJECT bridge (echo + complete), JS загружает локальный Qt qwebchannel.js и проверяет C++ reply; добавлен AUTOMOC. Rebuild/deploy в новый `webengine-channel-deploy` и runtime без SDK PATH — PASS: `WEBENGINE_LOCAL_HTML_JS_PASS` и `WEBENGINE_QWEBCHANNEL_ROUNDTRIP_PASS`, Qt 6.7.2. Sandbox не отключался. Warnings SerialPort/NMEA, VMware LLVMPipe/Vulkan/GPU/DPI сохраняются. Проверен synthetic bridge отдельного target, не production bridge MDMBOX. Далее — закрыть runtime dependency warning и isolated client startup, затем pinned bootstrap; release gates не закрыты.
 
+SerialPort/NMEA missing dependency устранена: Qt SerialPort 6.7.2 из того же repository, SHA1 проверен, SHA256 в baseline doc. Deployment автоматически включает Qt6SerialPort.dll. Вызов вне VsDevCmd выявил missing DXCompiler/DXIL/VCINSTALLDIR warnings; повтор в x64 VsDevCmd устранил их и добавил dxcompiler.dll/dxil.dll/vc_redist.x64.exe. Presence этих файлов и QtWebEngineProcess PASS; HTML/JS/QWebChannel runtime без SDK PATH снова PASS. VMware software rendering/Vulkan/GPU/DPI warnings остаются. Далее isolated MDMBOX startup после аудита side effects, pinned bootstrap; clean VM и полная DLL/installer проверка NOT RUN.
+
 При начале реализации проверено: `beta-ilya` отслеживает `origin/beta-ilya`, HEAD `d124815`, рабочее дерево было чистым, staged diff пустым. Эти значения не заменяют новую проверку git в следующей сессии.
 
 ### Следующая рабочая задача
