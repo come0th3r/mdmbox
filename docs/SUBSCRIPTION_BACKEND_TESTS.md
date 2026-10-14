@@ -53,3 +53,24 @@ denial-stub detection, mihomo subprocess validation or protocol E2E claim is
 made. Provider-only profiles are outside this initial inline mikan contract.
 Traversal bounds apply after YAML parsing; hard parse-time memory/time limits
 still require process isolation or another bounded parsing design.
+
+## Atomic managed document storage — 2026-10-15
+
+`ManagedProfileStore` adds a schema-1 envelope keyed by existing group ID;
+it is not a separate group database. Exact source, kind and SHA256 are kept
+together in one atomically replaced file. Commit requires a validator callback,
+serialized by QLockFile, and uses QSaveFile without direct-write fallback.
+Before replacement the last envelope is saved to `.previous`; failure to save
+that snapshot prevents replacement. Corrupt current data is not overwritten.
+
+Windows standalone build/CTest: **1/1 PASS**, including the previous structural
+suite plus store/load byte preservation, rejected/missing validator, invalid
+input/ID, writer lock contention, snapshot/replacement, corrupt current data
+and deterministic snapshot-write failure with unchanged current bytes.
+The tests use artificial validation callbacks, **not a real mihomo binary**.
+
+Refresh integration, validator subprocess, core-version revalidation, private
+data ACLs, disk-full, power-loss/process-crash injection, stale-lock recovery,
+metadata and running-core rollback remain **NOT RUN / NOT IMPLEMENTED**.
+Single-file atomic replacement does not constitute a complete subscription
+transaction. Snapshot/profile files are private data, not encrypted by Base64.

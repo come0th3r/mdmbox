@@ -1,5 +1,10 @@
 #include "../../sub/ManagedProfile.hpp"
+#include "../../sub/ManagedProfileStore.hpp"
 #include <QCoreApplication>
+#include <QDir>
+#include <QFile>
+#include <QLockFile>
+#include <QTemporaryDir>
 #include <QTextStream>
 
 int main(int argc, char **argv) {
@@ -37,5 +42,40 @@ int main(int argc, char **argv) {
         ++rejected;
     }
     QTextStream(stdout) << "MANAGED_PROFILE_STRUCTURE_PASS rejected=" << rejected << "\n";
+    QTemporaryDir directory;
+    if (!directory.isValid()) return 4;
+    NekoGui_sub::ManagedProfileStore store(directory.path());
+    const auto accept = [](const NekoGui_sub::ManagedProfile &, QString &) { return true; };
+    const auto reject = [](const NekoGui_sub::ManagedProfile &, QString &e) { e = "private details"; return false; };
+    auto readBytes = [](const QString &path) {
+        QFile file(path);
+        return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
+    };
+    const auto path = QDir(directory.path()).filePath("7.json");
+    if (!store.commit(7, source, accept, error) || !store.load(7, profile, error) || profile.source != source) return 5;
+    const auto original = readBytes(path);
+    if (store.commit(7, source, reject, error) || error.contains("private") || readBytes(path) != original) return 6;
+    if (store.commit(7, {}, accept, error) || store.commit(7, source, {}, error) ||
+        store.commit(-1, source, accept, error) || readBytes(path) != original) return 7;
+    {
+        QLockFile lock(path + ".lock");
+        if (!lock.tryLock() || store.commit(7, source, accept, error) || readBytes(path) != original) return 8;
+    }
+    const auto updated = source + "# refreshed\n";
+    if (!store.commit(7, updated, accept, error) || readBytes(path + ".previous") != original ||
+        !store.load(7, profile, error) || profile.source != updated) return 9;
+    {
+        QFile corrupt(path);
+        if (!corrupt.open(QIODevice::WriteOnly | QIODevice::Truncate) || corrupt.write("{}") != 2) return 10;
+    }
+    if (store.load(7, profile, error) || profile.source != updated ||
+        store.commit(7, source, accept, error) || readBytes(path) != "{}") return 11;
+    const auto otherPath = QDir(directory.path()).filePath("8.json");
+    if (!store.commit(8, source, accept, error)) return 12;
+    const auto otherOriginal = readBytes(otherPath);
+    // Deterministic snapshot-write failure must not replace the current document.
+    if (!QDir().mkdir(otherPath + ".previous") || store.commit(8, updated, accept, error) ||
+        readBytes(otherPath) != otherOriginal) return 13;
+    QTextStream(stdout) << "MANAGED_PROFILE_STORE_PASS\n";
     return 0;
 }
