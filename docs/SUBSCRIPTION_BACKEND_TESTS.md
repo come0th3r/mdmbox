@@ -349,3 +349,15 @@ Graceful shutdown **NOT RUN/UNRESOLVED**, not PASS. Proxy data path, production
 CoreManager integration, second-level children, bind races, OS proxy/DNS/route
 snapshots and clean VM remain **NOT RUN**. Startup connection-refused polling
 emitted Qt device-not-open warning; no raw core logs were collected.
+
+## Managed runtime HTTP data path — 2026-10-15
+
+Extended smoke with raw absolute-form HTTP request to loopback mixed port →
+DIRECT route → synthetic local HTTP origin. Exact body and exactly one origin
+request required; bounded 5-second wait and 8 KiB response. No client proxy
+bypass can satisfy this test because TCP connects explicitly to mixed port.
+Windows build **PASS**, base CTest **1/1 PASS**, two runtime invocations **PASS**,
+exit 0, each `MIHOMO_LOOPBACK_HTTP_DATA_PATH_PASS requests=1`.
+Both still report `forced=1` at stop. Graceful shutdown remains unresolved.
+SOCKS outbound/external VPN/UDP/TUN/protocol E2E and production lifecycle binding
+remain **NOT RUN**. Startup polling no longer reads unopened replies.

@@ -112,6 +112,8 @@ Isolated startup observation завершена: новые client-startup-deplo
 
 После `302ddd2` добавлен explicit mdmbox_managed_runtime_smoke (не auto CTest): hash+config-check → real projected loopback mihomo start → authenticated version readiness/401 без token/200 с token/mixed TCP listener → child stop/closed ports. Windows PASS exit 0, base CTest 1/1 PASS. forced=1: terminate Windows console core не остановил, kill fallback; graceful shutdown unresolved, НЕ PASS. Random API token in-memory/no logs, temporary home. Data path/production lifecycle/process-tree/bind races/OS snapshots NOT RUN. Далее real loopback HTTP data path + корректный Windows graceful lifecycle, затем production CoreManager; отдельный commit каждого изменения.
 
+После `aa380a1` runtime smoke расширен real mixed HTTP→DIRECT→local HTTP origin: raw absolute-form request (без localhost proxy bypass), exact body/one request, 5s/8KiB bounds. Windows build PASS/base CTest 1/1 PASS/two runtime runs PASS exit 0; API auth/readiness/port closure проходят, forced=1 оба раза. Startup unopened reply warning устранён. НЕ SOCKS outbound/VPN E2E; graceful shutdown unresolved. Далее Windows controlled graceful console lifecycle/cleanup и production CoreManager, затем provider/geodata и реальные протоколы, каждый логический этап отдельным коммитом.
+
 1. Проверить branch/status и перечитать незавершённые пункты этапа 0 в плане.
 2. Проверить установленные Qt/MSVC/CMake/Ninja/Go и сборочные scripts, не запускать разрушительную пересборку до их аудита.
    Использовать предоставленный удалённый Windows-стенд: SSH уже проверен; следующий шаг — отдельный checkout и полный preflight, затем подготовка недостающих SDK. Не считать стенд чистой VM без проверки.

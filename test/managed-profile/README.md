@@ -130,6 +130,13 @@ shutdown proof. Actual proxy data path, production lifecycle integration,
 process-tree cleanup, bind-race resilience and OS snapshot checks are pending.
 Dynamic port reservation is released before start and cannot eliminate races.
 
+Runtime smoke now also sends raw absolute-form HTTP through the mixed port
+to a synthetic loopback HTTP origin. Exact response body and one origin request
+are required, with 5-second timeout/8 KiB response bound. Raw TCP avoids client
+automatic localhost proxy bypass. Two Windows runs PASS. This is mixed HTTP →
+DIRECT → local origin, not SOCKS5 outbound/VPN protocol E2E. Graceful shutdown
+still needs forced fallback; no improvement to that gate is claimed.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

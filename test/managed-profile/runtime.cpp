@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
         timeout.start(500);
         if (!reply->isFinished()) loop.exec();
         const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        body = reply->read(8192);
+        body = reply->isOpen() ? reply->read(8192) : QByteArray{};
         delete reply;
         return status;
     };
@@ -99,6 +99,61 @@ int main(int argc, char **argv) {
     mixed.connectToHost(QHostAddress::LocalHost, mixedPort);
     if (!mixed.waitForConnected(1000)) return 10;
     mixed.disconnectFromHost();
+    QTcpServer origin;
+    if (!origin.listen(QHostAddress::LocalHost, 0)) return 13;
+    int originRequests = 0;
+    bool validOriginRequest = false;
+    QObject::connect(&origin, &QTcpServer::newConnection, &app, [&] {
+        while (origin.hasPendingConnections()) {
+            auto *socket = origin.nextPendingConnection();
+            QObject::connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+            QObject::connect(socket, &QTcpSocket::readyRead, socket, [&, socket] {
+                const auto input = socket->property("input").toByteArray() + socket->readAll();
+                socket->setProperty("input", input);
+                if (!input.contains("\r\n\r\n") || socket->property("sent").toBool()) return;
+                socket->setProperty("sent", true);
+                ++originRequests;
+                validOriginRequest = input.startsWith("GET /managed-smoke HTTP/1.1\r\n");
+                socket->write("HTTP/1.1 200 OK\r\nContent-Length: 17\r\nConnection: close\r\n\r\nmanaged-path-pass");
+                socket->disconnectFromHost();
+            });
+        }
+    });
+    // Raw absolute-form HTTP request forces traversal through the mixed listener,
+    // avoiding any HTTP client's implicit bypass for loopback destinations.
+    QTcpSocket proxyClient;
+    proxyClient.connectToHost(QHostAddress::LocalHost, mixedPort);
+    if (!proxyClient.waitForConnected(1000)) return 14;
+    const auto originAddress = QByteArray("127.0.0.1:") + QByteArray::number(origin.serverPort());
+    const auto proxyRequest = "GET http://" + originAddress + "/managed-smoke HTTP/1.1\r\nHost: " +
+        originAddress + "\r\nConnection: close\r\n\r\n";
+    QEventLoop transferLoop;
+    QTimer transferDeadline;
+    QByteArray response;
+    bool oversized = false;
+    bool timedOut = false;
+    auto collect = [&] {
+        response += proxyClient.read(8193 - response.size());
+        if (response.size() > 8192) { oversized = true; proxyClient.abort(); transferLoop.quit(); }
+    };
+    QObject::connect(&proxyClient, &QTcpSocket::readyRead, &transferLoop, collect);
+    QObject::connect(&proxyClient, &QTcpSocket::disconnected, &transferLoop, &QEventLoop::quit);
+    transferDeadline.setSingleShot(true);
+    QObject::connect(&transferDeadline, &QTimer::timeout, &transferLoop, [&] {
+        timedOut = true;
+        proxyClient.abort();
+        transferLoop.quit();
+    });
+    transferDeadline.start(5000);
+    if (proxyClient.write(proxyRequest) != proxyRequest.size()) return 15;
+    if (proxyClient.state() != QAbstractSocket::UnconnectedState) transferLoop.exec();
+    transferDeadline.stop();
+    if (proxyClient.bytesAvailable() > 0) collect();
+    const auto headerEnd = response.indexOf("\r\n\r\n");
+    if (timedOut || oversized || originRequests != 1 || !validOriginRequest ||
+        !response.startsWith("HTTP/1.1 200") || headerEnd < 0 ||
+        response.mid(headerEnd + 4) != "managed-path-pass") return 16;
+    QTextStream(stdout) << "MIHOMO_LOOPBACK_HTTP_DATA_PATH_PASS requests=1\n";
     // QProcess::terminate on Windows is not proof of graceful console shutdown.
     child.process.terminate();
     const bool terminated = child.process.waitForFinished(2000);
