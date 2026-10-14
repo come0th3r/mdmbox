@@ -137,6 +137,18 @@ automatic localhost proxy bypass. Two Windows runs PASS. This is mixed HTTP →
 DIRECT → local origin, not SOCKS5 outbound/VPN protocol E2E. Graceful shutdown
 still needs forced fallback; no improvement to that gate is claimed.
 
+### Windows console shutdown update
+
+The current smoke creates a separate hidden console for its core and invokes
+test-only `mdmbox_test_console_break.exe` to attach to that console and send
+CTRL_C (the helper filename is historical). It never broadcasts into the
+parent SSH console. CTRL_BREAK did not produce normal exit 0 and was rejected.
+Two final Windows runs with CTRL_C passed exit 0, forced=0, API/mixed ports
+closed and HTTP data path intact. Prior forced=1 observations above describe
+the older terminate path. Kill remains failure cleanup, not a passing shutdown.
+This is still test-only: production lifecycle, crash/process-tree handling,
+OS snapshot verification and installer packaging are pending.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

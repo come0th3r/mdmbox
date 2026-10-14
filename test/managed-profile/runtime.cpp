@@ -16,6 +16,10 @@
 #include <QTemporaryDir>
 #include <QTextStream>
 #include <QTimer>
+#ifdef Q_OS_WIN
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 
 struct ChildGuard {
     QProcess process;
@@ -57,6 +61,14 @@ int main(int argc, char **argv) {
     child.process.setWorkingDirectory(home.path());
     child.process.setStandardOutputFile(QProcess::nullDevice());
     child.process.setStandardErrorFile(QProcess::nullDevice());
+#ifdef Q_OS_WIN
+    child.process.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args) {
+        args->flags &= ~CREATE_NO_WINDOW;
+        args->flags |= CREATE_NEW_CONSOLE;
+        args->startupInfo->dwFlags |= STARTF_USESHOWWINDOW;
+        args->startupInfo->wShowWindow = SW_HIDE;
+    });
+#endif
     mixedReservation.close();
     apiReservation.close();
     child.process.start(executable, {"-d", home.path(), "-f", "-"});
@@ -154,9 +166,20 @@ int main(int argc, char **argv) {
         !response.startsWith("HTTP/1.1 200") || headerEnd < 0 ||
         response.mid(headerEnd + 4) != "managed-path-pass") return 16;
     QTextStream(stdout) << "MIHOMO_LOOPBACK_HTTP_DATA_PATH_PASS requests=1\n";
-    // QProcess::terminate on Windows is not proof of graceful console shutdown.
+    bool signalSent = false;
+#ifdef Q_OS_WIN
+    QProcess helper;
+    helper.start(QCoreApplication::applicationDirPath() + "/mdmbox_test_console_break.exe",
+                 {QString::number(child.process.processId())});
+    if (helper.waitForStarted(2000)) {
+        if (!helper.waitForFinished(3000)) { helper.kill(); helper.waitForFinished(1000); }
+        signalSent = helper.exitStatus() == QProcess::NormalExit && helper.exitCode() == 0;
+    }
+#else
     child.process.terminate();
-    const bool terminated = child.process.waitForFinished(2000);
+    signalSent = true;
+#endif
+    const bool terminated = child.process.state() == QProcess::NotRunning || child.process.waitForFinished(5000);
     if (!terminated) {
         child.process.kill();
         if (!child.process.waitForFinished(3000)) return 11;
@@ -166,5 +189,10 @@ int main(int argc, char **argv) {
     mixedAfter.connectToHost(QHostAddress::LocalHost, mixedPort);
     if (apiAfter.waitForConnected(500) || mixedAfter.waitForConnected(500)) return 12;
     QTextStream(stdout) << "MIHOMO_RUNTIME_API_AUTH_LISTENER_STOP_PASS forced=" << (!terminated ? 1 : 0) << "\n";
+    if (!signalSent || !terminated || child.process.exitStatus() != QProcess::NormalExit || child.process.exitCode() != 0) {
+        QTextStream(stderr) << "CONSOLE_STOP_FAILED signal=" << signalSent << " exit=" << child.process.exitCode() << "\n";
+        return 17;
+    }
+    QTextStream(stdout) << "MIHOMO_CONSOLE_GRACEFUL_EXIT_PASS code=0\n";
     return 0;
 }

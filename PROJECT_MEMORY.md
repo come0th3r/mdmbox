@@ -114,6 +114,8 @@ Isolated startup observation завершена: новые client-startup-deplo
 
 После `aa380a1` runtime smoke расширен real mixed HTTP→DIRECT→local HTTP origin: raw absolute-form request (без localhost proxy bypass), exact body/one request, 5s/8KiB bounds. Windows build PASS/base CTest 1/1 PASS/two runtime runs PASS exit 0; API auth/readiness/port closure проходят, forced=1 оба раза. Startup unopened reply warning устранён. НЕ SOCKS outbound/VPN E2E; graceful shutdown unresolved. Далее Windows controlled graceful console lifecycle/cleanup и production CoreManager, затем provider/geodata и реальные протоколы, каждый логический этап отдельным коммитом.
 
+После `d261ed4` smoke Windows stop переведён на separate hidden console + test-only attach helper/CTRL_C (helper filename console-break historical). CTRL_BREAK trial не прошёл normal exit0, CTRL_C final two runs PASS exit0 forced=0 + API/auth/data path/ports closed. Base CTest 1/1 PASS. Parent SSH console не сигналится, kill retained failure cleanup. Production lifecycle/crash/tree/OS snapshots NOT RUN. Далее вынести подтверждённый lifecycle в production manager с ownership/error states и отдельными тестами; standalone shutdown не равно готовность клиента. Каждый логический этап отдельным коммитом.
+
 1. Проверить branch/status и перечитать незавершённые пункты этапа 0 в плане.
 2. Проверить установленные Qt/MSVC/CMake/Ninja/Go и сборочные scripts, не запускать разрушительную пересборку до их аудита.
    Использовать предоставленный удалённый Windows-стенд: SSH уже проверен; следующий шаг — отдельный checkout и полный preflight, затем подготовка недостающих SDK. Не считать стенд чистой VM без проверки.

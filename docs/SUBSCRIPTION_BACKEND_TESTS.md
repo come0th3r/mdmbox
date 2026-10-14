@@ -361,3 +361,14 @@ exit 0, each `MIHOMO_LOOPBACK_HTTP_DATA_PATH_PASS requests=1`.
 Both still report `forced=1` at stop. Graceful shutdown remains unresolved.
 SOCKS outbound/external VPN/UDP/TUN/protocol E2E and production lifecycle binding
 remain **NOT RUN**. Startup polling no longer reads unopened replies.
+
+## Windows controlled console shutdown — 2026-10-15
+
+Smoke now starts core in a separate hidden console (Qt CreateProcess modifier)
+and uses a test-only helper attaching to that console to send CTRL_C. Parent
+SSH console is not signalled. Initial CTRL_BREAK trial closed the process but
+failed strict normal exit-0 gate; final CTRL_C runs **2/2 PASS**, exit 0 and
+`forced=0`, closed API/mixed ports, HTTP data path and auth still PASS.
+Base CTest **1/1 PASS** during this change. Failure path retains bounded kill.
+No claim of application-wide graceful lifecycle: production manager, process
+tree/crash cleanup and OS snapshot checks remain **NOT RUN**.

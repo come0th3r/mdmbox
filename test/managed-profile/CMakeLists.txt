@@ -15,3 +15,7 @@ find_package(Qt6 REQUIRED COMPONENTS Network)
 add_executable(mdmbox_managed_runtime_smoke runtime.cpp ../../sub/ManagedProfile.cpp ../../sub/ManagedRuntimePolicy.cpp ../../sub/MihomoValidator.cpp)
 target_link_libraries(mdmbox_managed_runtime_smoke PRIVATE Qt6::Core Qt6::Network yaml-cpp)
 # Explicit binary argument required; ordinary CTest does not start a runtime.
+if (WIN32)
+    add_executable(mdmbox_test_console_break console-break.cpp)
+    add_dependencies(mdmbox_managed_runtime_smoke mdmbox_test_console_break)
+endif ()
