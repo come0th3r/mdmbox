@@ -287,3 +287,20 @@ then final bounded run passed. No production logic change was needed.
 This is synthetic loopback backend integration, not live mikan or GUI/runtime
 E2E. Provider/geodata provisioning, connection/reconnect, OS effects and clean
 VM gates remain **NOT RUN**. Optional run requires unexpired external fixtures.
+
+## Initial runtime resource gate — 2026-10-15
+
+Added standalone `ManagedRuntimePolicy::checkSelfContained`, a conservative
+precondition for future loopback smoke: refuses provider/geodata declarations,
+GEOIP/GEOSITE/RULE-SET (including nested rule text), external controller/UI,
+TUN/listeners/tunnels, credentials and interface controls, plus DNS policies
+requiring explicit resource handling. Refusal does not modify stored source.
+This gate is NOT wired to subscription refresh (complete documents must still
+be stored), does NOT start a core, and is NOT a sandbox or exhaustive audit of
+all mihomo fields. Runtime projection must still remove/override local ports,
+DNS listeners, cache and OS-related settings before any execution.
+
+Windows ordinary Release build **PASS**, backend CTest **1/1 PASS**, pinned-core
+suite **PASS** exit 0. Tests cover simple accepted profile and resource/control
+refusal cases. Most real mikan profiles remain blocked until provisioning and
+projection exist. No connection readiness or protocol coverage is claimed.

@@ -4,6 +4,7 @@
 #include "../../sub/SubscriptionContract.hpp"
 #include "../../sub/InstallationIdentity.hpp"
 #include "../../sub/SubscriptionService.hpp"
+#include "../../sub/ManagedRuntimePolicy.hpp"
 #include <QUrlQuery>
 #include <QCoreApplication>
 #include <QDir>
@@ -82,6 +83,32 @@ int main(int argc, char **argv) {
         ++rejected;
     }
     QTextStream(stdout) << "MANAGED_PROFILE_STRUCTURE_PASS rejected=" << rejected << "\n";
+    auto selfContained = source;
+    selfContained.replace("rule-providers: {synthetic: {type: file, path: rules/synthetic.yaml}}\n", "");
+    NekoGui_sub::ManagedProfile runtimeCandidate;
+    if (!NekoGui_sub::ManagedProfile::ParseMihomo(selfContained, runtimeCandidate, error) ||
+        !NekoGui_sub::ManagedRuntimePolicy::checkSelfContained(runtimeCandidate, error)) return 51;
+    for (const auto &addition : QList<QByteArray>{
+             "rule-providers: {}\n", "proxy-providers: {}\n", "geox-url: {}\n",
+             "tun: {enable: false}\n", "listeners: []\n", "tunnels: []\n",
+             "external-controller: 0.0.0.0:9090\n", "external-controller-pipe: synthetic\n",
+             "external-ui-url: https://example.invalid/ui.zip\n", "secret: synthetic-not-a-real-secret\n",
+             "interface-name: synthetic\n", "authentication: []\n"}) {
+        if (!NekoGui_sub::ManagedProfile::ParseMihomo(selfContained + addition, runtimeCandidate, error) ||
+            NekoGui_sub::ManagedRuntimePolicy::checkSelfContained(runtimeCandidate, error) || error.isEmpty()) return 52;
+    }
+    for (const auto &rule : {"GEOIP,LAN,DIRECT", "GEOSITE,category-ru,DIRECT", "RULE-SET,synthetic,DIRECT",
+                             "AND,((NETWORK,UDP),(GEOIP,ru)),DIRECT"}) {
+        auto dependent = selfContained;
+        dependent.replace("MATCH,select", rule);
+        if (!NekoGui_sub::ManagedProfile::ParseMihomo(dependent, runtimeCandidate, error) ||
+            NekoGui_sub::ManagedRuntimePolicy::checkSelfContained(runtimeCandidate, error)) return 53;
+    }
+    auto dnsDependent = selfContained;
+    dnsDependent.replace("nameserver: [127.0.0.1]", "nameserver-policy: {'geosite:category-ru': [127.0.0.1]}");
+    if (!NekoGui_sub::ManagedProfile::ParseMihomo(dnsDependent, runtimeCandidate, error) ||
+        NekoGui_sub::ManagedRuntimePolicy::checkSelfContained(runtimeCandidate, error) || profile.source != source) return 54;
+    QTextStream(stdout) << "MANAGED_RUNTIME_RESOURCE_GATE_PASS\n";
     QTemporaryDir directory;
     if (!directory.isValid()) return 4;
     const auto identityDirectory = QDir(directory.path()).filePath("identity");

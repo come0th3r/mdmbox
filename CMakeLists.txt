@@ -248,6 +248,7 @@ set(PROJECT_SOURCES
 if (NOT NKR_NO_YAML)
     list(APPEND PROJECT_SOURCES
             sub/ManagedProfile.cpp
+            sub/ManagedRuntimePolicy.cpp
             sub/ManagedProfileStore.cpp
             sub/MihomoValidator.cpp
             sub/SubscriptionContract.cpp
