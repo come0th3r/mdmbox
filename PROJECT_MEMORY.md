@@ -40,10 +40,15 @@
 - Создана ветка `beta-ilya` от `origin/main`, настроен upstream `origin/beta-ilya`.
 - Проверены UTF-8, структура документа, исходные пути и staged diff; публикация плана подтверждена remote SHA.
 - Созданы эта память и корневой `AGENTS.md` с порядком чтения контекста.
+- Пользователь передал тестовую подписку и поручил начать реализацию. Ссылка считается секретом и здесь не хранится.
+- Добавлены read-only build preflight, ограниченный HTTPS subscription probe и автономные синтетические тесты; результаты и команды — `docs/STAGE0_BASELINE.md`.
+- Выполнено 14/14 тестов probe — PASS; PowerShell syntax и diff-check — PASS.
+- Проверены живые HEAD и GET uri/clash: HTTP 200; URI-ответ содержит 20 ссылок (16 VLESS, 4 TUIC), Clash candidate — секции proxies/proxy-groups/rules/dns. Это не runtime validation.
+- Preflight: 19 BLOCKED checks; найдены Node.js 24.20.0 и QHotkey, прочие SDK/packages/replacement checkout не найдены в проверенных местах. Baseline build не выполнен.
 
 **Ещё не сделано:** реализация managed subscriptions/mihomo, новая вёрстка, интеграция, baseline build, runtime/E2E/visual tests, beta/stable release. Предлагаемые `SubscriptionService`, `ManagedProfileService`, `CoreManager` и `ui/shell/` — будущие элементы, а не готовый код.
 
-Перед созданием памяти проверено: рабочее дерево чистое; локальная и удалённая `beta-ilya` указывали на `16cfdeb`; `origin/main` — на `a7a9d13`. Эти значения не заменяют новую проверку git в следующей сессии.
+При начале реализации проверено: `beta-ilya` отслеживает `origin/beta-ilya`, HEAD `d124815`, рабочее дерево было чистым, staged diff пустым. Эти значения не заменяют новую проверку git в следующей сессии.
 
 ### Следующая рабочая задача
 
@@ -72,7 +77,7 @@ MDMBOX — форк кодовой базы Nekobox; установка отде
 
 ## 5. Рабочие решения из плана
 
-Статус: **предложенная архитектура, подлежащая проверке реализацией и тестами**. Пользователь пока запросил план и память проекта; отдельного подтверждения каждой технической детали не было.
+Статус: **рабочая архитектура, подлежащая проверке реализацией и тестами**. Пользователь поручил начать реализацию и предоставил тестовую подписку; отдельного подтверждения каждой технической детали не было.
 
 - C++17/Qt 6 — хост, сервисы, хранение и управление runtime; Go — сетевые ядра.
 - Локальные HTML/CSS/JavaScript в Qt WebEngine, связь через versioned QWebChannel contract. Независимый browser-preview использует mock того же bridge.
@@ -136,7 +141,7 @@ MDMBOX — форк кодовой базы Nekobox; установка отде
 
 ## 10. Проверки и выпуск
 
-Сейчас выполнены **только проверки документации и Git-публикации плана**. Проверок готовности приложения не было.
+Выполнены проверки документации/Git, автономные тесты subscription probe, build preflight и безопасные HTTP contract probes. Подробности — `docs/STAGE0_BASELINE.md`. Проверок готовности приложения не было.
 
 Планируемые инструменты: Qt Test/CTest, Go tests и HTTP fixtures, валидаторы закреплённых ядер, Node.js visual tests, PowerShell и Windows VM. Полная матрица и gates находятся в разделе 7 плана.
 
