@@ -3,12 +3,29 @@
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QLockFile>
 #include <QSaveFile>
 #include <utility>
 
 namespace {
+    QList<QPair<QByteArray, QByteArray>> metadataHeaders(const NekoGui_sub::SubscriptionMetadata &m) {
+        QList<QPair<QByteArray, QByteArray>> headers;
+        QByteArray usage;
+        auto counter = [&](const char *key, const auto &value) {
+            if (value) usage += QByteArray(key) + "=" + QByteArray::number(*value) + ";";
+        };
+        counter("upload", m.upload); counter("download", m.download);
+        counter("total", m.total); counter("expire", m.expiry);
+        if (!usage.isEmpty()) headers.append({"Subscription-Userinfo", usage});
+        if (m.updateHours) headers.append({"Profile-Update-Interval", QByteArray::number(*m.updateHours)});
+        if (!m.title.isEmpty()) headers.append({"Profile-Title", "base64:" + m.title.toUtf8().toBase64()});
+        if (!m.supportUrl.isEmpty()) headers.append({"Support-Url", m.supportUrl.toEncoded()});
+        if (!m.pageUrl.isEmpty()) headers.append({"Profile-Web-Page-Url", m.pageUrl.toEncoded()});
+        return headers;
+    }
+
     constexpr qint64 MaxEnvelopeBytes = 6 * 1024 * 1024;
     bool read(const QString &path, int groupId, NekoGui_sub::ManagedProfile &profile, QString &error) {
         QFile file(path);
@@ -69,7 +86,45 @@ namespace NekoGui_sub {
     }
 
     bool ManagedProfileStore::commit(int groupId, const QByteArray &source, const Validator &validate, QString &error) {
+        return commit(groupId, source, SubscriptionMetadata{}, validate, error);
+    }
+
+    bool ManagedProfileStore::loadMetadata(int groupId, SubscriptionMetadata &metadata, QString &error) const {
+        QLockFile lock(path(groupId) + QStringLiteral(".lock"));
+        if (!lock.tryLock(0)) {
+            error = QStringLiteral("Managed profile update already in progress");
+            return false;
+        }
+        ManagedProfile profile;
+        if (!load(groupId, profile, error)) return false;
+        QFile file(path(groupId));
+        if (!file.open(QIODevice::ReadOnly) || file.size() > MaxEnvelopeBytes) {
+            error = QStringLiteral("Managed metadata unavailable");
+            return false;
+        }
+        const auto object = QJsonDocument::fromJson(file.read(MaxEnvelopeBytes + 1)).object();
+        QList<QPair<QByteArray, QByteArray>> headers;
+        if (object.contains("metadata") && !object.value("metadata").isArray()) {
+            error = QStringLiteral("Invalid managed metadata envelope");
+            return false;
+        }
+        for (const auto &entry : object.value("metadata").toArray()) {
+            const auto pair = entry.toArray();
+            if (pair.size() != 2 || !pair[0].isString() || !pair[1].isString()) {
+                error = QStringLiteral("Invalid managed metadata entry");
+                return false;
+            }
+            headers.append({pair[0].toString().toUtf8(), pair[1].toString().toUtf8()});
+        }
+        return SubscriptionMetadata::parse(headers, metadata, error);
+    }
+
+    bool ManagedProfileStore::commit(int groupId, const QByteArray &source, const SubscriptionMetadata &metadata,
+                                     const Validator &validate, QString &error) {
         error.clear();
+        SubscriptionMetadata checkedMetadata;
+        const auto headers = metadataHeaders(metadata);
+        if (!SubscriptionMetadata::parse(headers, checkedMetadata, error)) return false;
         if (groupId < 0 || !validate) {
             error = QStringLiteral("Group ID and core validator are required");
             return false;
@@ -102,8 +157,11 @@ namespace NekoGui_sub {
             }
             if (!write(current + QStringLiteral(".previous"), file.read(MaxEnvelopeBytes + 1), error)) return false;
         }
+        QJsonArray storedMetadata;
+        for (const auto &header : headers) storedMetadata.append(QJsonArray{QString::fromUtf8(header.first), QString::fromUtf8(header.second)});
         const QJsonObject envelope{
             {"schema", 1}, {"groupId", groupId}, {"kind", "mihomo-full"},
+            {"metadata", storedMetadata},
             {"sourceBase64", QString::fromLatin1(candidate.source.toBase64())},
             {"sha256", QString::fromLatin1(candidate.sha256)}};
         return write(current, QJsonDocument(envelope).toJson(QJsonDocument::Compact), error);

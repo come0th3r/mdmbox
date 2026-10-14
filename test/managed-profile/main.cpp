@@ -3,6 +3,7 @@
 #include "../../sub/MihomoValidator.hpp"
 #include "../../sub/SubscriptionContract.hpp"
 #include "../../sub/InstallationIdentity.hpp"
+#include "../../sub/SubscriptionService.hpp"
 #include <QUrlQuery>
 #include <QCoreApplication>
 #include <QDir>
@@ -133,6 +134,44 @@ int main(int argc, char **argv) {
     if (!QDir().mkdir(otherPath + ".previous") || store.commit(8, updated, accept, error) ||
         readBytes(otherPath) != otherOriginal) return 13;
     QTextStream(stdout) << "MANAGED_PROFILE_STORE_PASS\n";
+    NekoGui_sub::SubscriptionMetadata serviceMetadata;
+    serviceMetadata.title = "Synthetic service";
+    serviceMetadata.upload = quint64(4294967296);
+    serviceMetadata.total = quint64(0);
+    serviceMetadata.updateHours = 1;
+    const auto fetch = [&](const NekoGui_sub::ManagedSubscriptionRequest &r, const QString &hwid,
+                           NekoGui_sub::SubscriptionDownload &d, QString &, const std::atomic_bool *) {
+        if (hwid.size() != 36 || QUrlQuery(r.url).queryItemValue("format") != "clash") return false;
+        d.source = source;
+        d.metadata = serviceMetadata;
+        return true;
+    };
+    const auto refresh = [&](const NekoGui_sub::ManagedProfileStore::Validator &v,
+                             const std::atomic_bool *cancel = nullptr) {
+        return NekoGui_sub::SubscriptionService::refresh(10, QUrl("https://example.invalid/token"), "0.1.0",
+            copiedDirectory, store, fetch, v, error, cancel);
+    };
+    if (!refresh(accept)) return 33;
+    const auto servicePath = QDir(directory.path()).filePath("10.json");
+    const auto serviceBytes = readBytes(servicePath);
+    NekoGui_sub::SubscriptionMetadata loadedMetadata;
+    if (!store.loadMetadata(10, loadedMetadata, error) || loadedMetadata.title != serviceMetadata.title ||
+        loadedMetadata.upload != serviceMetadata.upload || loadedMetadata.total != serviceMetadata.total) return 34;
+    serviceMetadata.expiry = 1;
+    if (refresh(accept) || readBytes(servicePath) != serviceBytes) return 35;
+    serviceMetadata.expiry.reset();
+    if (refresh(reject) || readBytes(servicePath) != serviceBytes) return 36;
+    std::atomic_bool cancelled{false};
+    const auto cancelDuringValidation = [&](const NekoGui_sub::ManagedProfile &, QString &) {
+        cancelled = true;
+        return true;
+    };
+    if (refresh(cancelDuringValidation, &cancelled) || readBytes(servicePath) != serviceBytes) return 37;
+    {
+        QLockFile lock(QDir(copiedDirectory).filePath("subscription-refresh-10.lock"));
+        if (!lock.tryLock() || refresh(accept) || readBytes(servicePath) != serviceBytes) return 38;
+    }
+    QTextStream(stdout) << "SUBSCRIPTION_SERVICE_REFRESH_PASS\n";
     if (app.arguments().size() == 2) {
         const auto exe = app.arguments().at(1);
         QByteArray valid = source;

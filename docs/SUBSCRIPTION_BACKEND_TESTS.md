@@ -159,3 +159,22 @@ HTTPS certificate fixtures, chunked oversize, truncation, other HTTP statuses,
 header memory bounds, proxy policy, approved redirect handling and live mikan
 requests remain **NOT RUN**. Legacy request helper remains unchanged; managed
 refresh/store/metadata integration is next and not available in production yet.
+
+## Refresh orchestration and metadata persistence — 2026-10-15
+
+`SubscriptionService` connects request/identity/download, rejects expired or
+exhausted subscription metadata, validates the candidate and commits source
+and normalized metadata together. Metadata counters remain decimal strings;
+no uint64 precision is lost through JSON floating point. Service refresh locks
+span download through commit; cancellation is rechecked after validation.
+
+Windows build/base CTest **1/1 PASS**: synthetic refresh, metadata roundtrip
+(including >32-bit usage/unlimited), expired rejection, validation rejection,
+cancellation during validation and refresh lock contention all preserve the
+last envelope on failure. Real pinned-core integration suite rerun: **PASS**,
+exit 0. Service orchestration tests use injected transport/validator, not a
+live mikan download followed by real validation in one invocation.
+
+Production GroupUpdater binding, combined snapshot-read API, metadata
+corruption recovery, denial stubs, scheduler and runtime apply/rollback remain
+pending. No managed connection or complete subscription support claimed.

@@ -82,6 +82,30 @@ the actual app and verified core versions. Unit-test `0.1.0` is synthetic,
 not a new application release version. No download or HWID is implemented by
 this contract; legacy URL header suffixes are not accepted here.
 
+## Refresh orchestration
+
+`SubscriptionService` connects request construction, persisted installation
+identity, injected download, expiry/quota checks, validation and store commit.
+A per-group lock spans download through commit (in the shared identity data
+directory), preventing parallel refreshes using this service. Cancellation is
+checked before download, after download and after validation before writing.
+The store now records normalized metadata and source together in the same
+atomic envelope; counters are represented as decimal strings, not JSON doubles.
+Older envelopes without metadata load as unknown metadata.
+
+Tests inject download/validation to verify metadata persistence, expired
+subscription rejection, failed validation, cancellation during validation and
+refresh lock contention without changing the prior envelope. Real core/store
+integration remains separately exercised by the optional binary argument.
+
+This service is not yet bound to the production GroupUpdater. The download
+and validator dependencies must be bound to the genuine adapters, not mock
+callbacks. The currently fixed core version is appropriate only for the pinned
+1.19.32 adapter. Provider provisioning, denial-stub detection, scheduler,
+reconnect and runtime selection are pending. Cancellation after the final
+pre-commit check cannot roll back a completed commit. Load metadata separately
+from source is not a combined snapshot API for future concurrent UI readers.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under
