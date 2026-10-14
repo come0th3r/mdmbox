@@ -122,3 +122,21 @@ The contract is not wired into the legacy request helper yet. Actual version
 verification is the caller's responsibility; test app version is artificial.
 HWID persistence, HTTP size/redirect/cancellation controls, metadata persistence,
 denial-stub handling, scheduling and managed group integration remain pending.
+
+## Persistent installation identity — 2026-10-15
+
+Added `InstallationIdentity` with schema-1 UUID storage in caller-owned appdata,
+QLockFile writer protection and QSaveFile atomic creation. No hardware serial
+or registry identity is read. Corrupt, oversized or unavailable existing files
+are rejected; no implicit identity regeneration or extra device slot is caused.
+
+Windows build and CTest **1/1 PASS**, including creation, stable repeated reads,
+contention rejection, portable-copy identity preservation and corrupt-file
+rejection preserving the returned prior ID. Previous metadata/structure/store
+suites remain PASS. Generated test IDs stayed in temporary directories and
+were not printed or added to Git.
+
+HTTP header integration, true concurrent-process/crash tests, ACL protection,
+reinstall/reset policy and registration with a real mikan panel remain pending.
+Portable data copied to another machine currently retains its identity; any
+explicit rotate action must warn about panel registration/device-slot effects.

@@ -2,6 +2,7 @@
 #include "../../sub/ManagedProfileStore.hpp"
 #include "../../sub/MihomoValidator.hpp"
 #include "../../sub/SubscriptionContract.hpp"
+#include "../../sub/InstallationIdentity.hpp"
 #include <QUrlQuery>
 #include <QCoreApplication>
 #include <QDir>
@@ -79,6 +80,26 @@ int main(int argc, char **argv) {
     QTextStream(stdout) << "MANAGED_PROFILE_STRUCTURE_PASS rejected=" << rejected << "\n";
     QTemporaryDir directory;
     if (!directory.isValid()) return 4;
+    const auto identityDirectory = QDir(directory.path()).filePath("identity");
+    QString identity;
+    if (!NekoGui_sub::InstallationIdentity::loadOrCreate(identityDirectory, identity, error) || identity.size() != 36) return 27;
+    const auto firstIdentity = identity;
+    if (!NekoGui_sub::InstallationIdentity::loadOrCreate(identityDirectory, identity, error) || identity != firstIdentity) return 28;
+    const auto identityPath = QDir(identityDirectory).filePath("installation-identity.json");
+    {
+        QLockFile lock(identityPath + ".lock");
+        if (!lock.tryLock() || NekoGui_sub::InstallationIdentity::loadOrCreate(identityDirectory, identity, error) ||
+            identity != firstIdentity) return 29;
+    }
+    const auto copiedDirectory = QDir(directory.path()).filePath("copied-identity");
+    if (!QDir().mkpath(copiedDirectory) || !QFile::copy(identityPath, QDir(copiedDirectory).filePath("installation-identity.json")) ||
+        !NekoGui_sub::InstallationIdentity::loadOrCreate(copiedDirectory, identity, error) || identity != firstIdentity) return 30;
+    {
+        QFile damaged(identityPath);
+        if (!damaged.open(QIODevice::WriteOnly | QIODevice::Truncate) || damaged.write("{}") != 2) return 31;
+    }
+    if (NekoGui_sub::InstallationIdentity::loadOrCreate(identityDirectory, identity, error) || identity != firstIdentity) return 32;
+    QTextStream(stdout) << "INSTALLATION_IDENTITY_PASS\n";
     NekoGui_sub::ManagedProfileStore store(directory.path());
     const auto accept = [](const NekoGui_sub::ManagedProfile &, QString &) { return true; };
     const auto reject = [](const NekoGui_sub::ManagedProfile &, QString &e) { e = "private details"; return false; };

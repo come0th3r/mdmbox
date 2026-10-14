@@ -81,3 +81,17 @@ It produces `MDMBOX/<app-version> mihomo/<core-version>`; callers must supply
 the actual app and verified core versions. Unit-test `0.1.0` is synthetic,
 not a new application release version. No download or HWID is implemented by
 this contract; legacy URL header suffixes are not accepted here.
+
+## Installation identity
+
+`InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under
+the caller's application data directory, using a lock and atomic write with
+no direct fallback. Existing malformed/oversized data is rejected without
+silently rotating the ID. This avoids consuming a new panel device slot after
+a transient or corrupt read. Machine serial numbers are not used.
+
+Tests exercise creation, repeated reads, lock contention, corrupted identity
+and copying the identity file to a portable data directory. Copying the data
+preserves the same ID; a genuinely separate data directory creates a separate
+identity. Reinstall policy, Windows ACLs and actual panel HWID registration
+are not validated yet. The component is not wired into HTTP requests.
