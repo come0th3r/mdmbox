@@ -64,3 +64,20 @@ or fetch geodata/providers. Network/filesystem confinement, subprocess memory
 limits, timeout/crash fault injection, executable TOCTOU protection and
 provider/cache provisioning remain pending. The hard-coded Windows baseline
 hash deliberately rejects other binaries, even ones reporting the same version.
+
+## Subscription contract
+
+`SubscriptionContract` parses case-insensitive metadata headers into optional
+64-bit counters/expiry, title, safe web URLs and update interval in **hours**.
+Missing total is unknown, zero total is unlimited, missing usage does not imply
+zero usage. Exhaustion arithmetic avoids overflow. Invalid/duplicate known
+headers or counters leave the previous result untouched. Update intervals
+outside 1–168 hours are rejected; this is not yet scheduler/backoff behavior.
+
+The request builder requires HTTPS, no embedded credentials/fragment and
+version-shaped app/core strings. It replaces duplicate `format` parameters
+with one `format=clash`, retaining other query values and the custom path.
+It produces `MDMBOX/<app-version> mihomo/<core-version>`; callers must supply
+the actual app and verified core versions. Unit-test `0.1.0` is synthetic,
+not a new application release version. No download or HWID is implemented by
+this contract; legacy URL header suffixes are not accepted here.

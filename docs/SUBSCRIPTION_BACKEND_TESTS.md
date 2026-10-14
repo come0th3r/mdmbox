@@ -101,3 +101,24 @@ Timeout/crash injection, subprocess memory limits, network/file confinement,
 provider provisioning, core runtime management and refresh integration remain
 **NOT RUN / NOT IMPLEMENTED**. Config-check may access external resources;
 temporary home is isolation of data, not an OS security sandbox.
+
+## Metadata and request contract — 2026-10-15
+
+Added `SubscriptionContract`: optional uint64 byte counters and int64 expiry,
+unknown/unlimited/exhausted distinction, overflow-safe exhaustion, Base64 UTF-8
+title, hour-based update interval and HTTP(S) metadata URLs. Strict malformed/
+duplicate metadata rejection preserves the previous result. Managed request
+builder requires HTTPS and version-shaped strings; preserves custom path and
+other query values while replacing duplicate format values with `clash`.
+
+Windows build and CTest **1/1 PASS**, including counters above 32 bits, uint64
+overflow rejection, expiry boundary/range, unlimited/unknown states, Unicode
+Base64 title, duplicate headers/counters, header injection, unsafe metadata
+URL, invalid interval, repeated query values and malformed UA version input.
+Structural/store tests also remain PASS. Real-mihomo integration was not rerun
+for this contract-only change; no HTTP download or live mikan request performed.
+
+The contract is not wired into the legacy request helper yet. Actual version
+verification is the caller's responsibility; test app version is artificial.
+HWID persistence, HTTP size/redirect/cancellation controls, metadata persistence,
+denial-stub handling, scheduling and managed group integration remain pending.

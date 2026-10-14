@@ -1,6 +1,8 @@
 #include "../../sub/ManagedProfile.hpp"
 #include "../../sub/ManagedProfileStore.hpp"
 #include "../../sub/MihomoValidator.hpp"
+#include "../../sub/SubscriptionContract.hpp"
+#include <QUrlQuery>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -10,6 +12,38 @@
 
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
+    QString contractError;
+    NekoGui_sub::SubscriptionMetadata metadata;
+    if (!NekoGui_sub::SubscriptionMetadata::parse({
+            {"Subscription-Userinfo", "upload=4294967296; download=4294967297; total=8589934593; expire=2000000000"},
+            {"Profile-Title", "base64:" + QStringLiteral("Синтетическая подписка").toUtf8().toBase64()},
+            {"Profile-Update-Interval", "1"}, {"Support-Url", "https://example.invalid/help"}}, metadata, contractError) ||
+        !metadata.exhausted() || metadata.expired(1999999999) || !metadata.expired(2000000000) ||
+        metadata.title != QStringLiteral("Синтетическая подписка") || metadata.updateHours != 1) return 20;
+    const auto title = metadata.title;
+    for (const auto &bad : QList<QPair<QByteArray, QByteArray>>{
+            {"Subscription-Userinfo", "total=-1"}, {"Subscription-Userinfo", "upload=18446744073709551616"},
+            {"Subscription-Userinfo", "expire=9223372036854775808"}, {"Subscription-Userinfo", "total=1;total=2"},
+            {"Profile-Title", "base64:%%%"}, {"Profile-Title", "base64:AA=="},
+            {"Profile-Update-Interval", "0"}, {"Profile-Update-Interval", "169"},
+            {"Support-Url", "javascript:alert(1)"}, {"Profile-Title", "line\r\ninjection"}}) {
+        if (NekoGui_sub::SubscriptionMetadata::parse({bad}, metadata, contractError) ||
+            metadata.title != title || contractError.isEmpty()) return 21;
+    }
+    if (NekoGui_sub::SubscriptionMetadata::parse({{"Profile-Title", "a"}, {"profile-title", "b"}}, metadata, contractError)) return 22;
+    if (!NekoGui_sub::SubscriptionMetadata::parse({{"Subscription-Userinfo", "upload=18446744073709551615; download=18446744073709551615; total=0; expire=0"}}, metadata, contractError) ||
+        metadata.exhausted() || metadata.expired(2000000000)) return 23;
+    if (!NekoGui_sub::SubscriptionMetadata::parse({}, metadata, contractError) || metadata.total || metadata.updateHours) return 24;
+    NekoGui_sub::ManagedSubscriptionRequest request;
+    const QUrl url("https://example.invalid/custom/prefix/token?x=a%2Fb&x=c%2Bd&format=uri&format=yaml");
+    if (!NekoGui_sub::ManagedSubscriptionRequest::build(url, "0.1.0", "1.19.32", request, contractError) ||
+        request.url.path() != url.path() || QUrlQuery(request.url).allQueryItemValues("format") != QStringList{"clash"} ||
+        QUrlQuery(request.url).allQueryItemValues("x") != QUrlQuery(url).allQueryItemValues("x") ||
+        request.userAgent != "MDMBOX/0.1.0 mihomo/1.19.32") return 25;
+    const auto goodUrl = request.url;
+    if (NekoGui_sub::ManagedSubscriptionRequest::build(QUrl("http://example.invalid/token"), "0.1.0", "1.19.32", request, contractError) ||
+        NekoGui_sub::ManagedSubscriptionRequest::build(url, "0.1.0", "fake\r\nheader", request, contractError) || request.url != goodUrl) return 26;
+    QTextStream(stdout) << "SUBSCRIPTION_METADATA_REQUEST_PASS\n";
     const QByteArray source =
         "# synthetic, no private config\n"
         "proxies:\n  - {name: node, type: socks5, server: 127.0.0.1, port: 12345, future-field: keep}\n"
