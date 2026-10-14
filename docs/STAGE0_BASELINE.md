@@ -82,6 +82,24 @@ $configureArgs = @(
 
 **NOT RUN:** запуск mdmbox/WebEngine, Qt deployment, Go core build, protocol E2E, installer и чистая VM-проверка. GUI-only build не закрывает baseline/release gate этапа 0. Следующие задачи — воспроизводимые scripts, согласование sing replacement, Go build и изолированный runtime smoke без изменения proxy/TUN.
 
+### Воспроизводимый GUI entry point и попытка Go build
+
+Добавлен `tools/build-baseline-gui.ps1`: принимает `QtRoot`, `DependencyRoot`, `BuildDirectory`, опционально `VsDevCmd` и `Parallel`. Использует подготовленные SDK, не скачивает зависимости, не удаляет build tree, не завершает процессы и не меняет manifests. Импортирует x64 MSVC environment и восстанавливает окружение вызывающего процесса после работы. Проверен на стенде повторным configure/build: **GUI_BUILD_PASS**, SHA256 бинарника совпадает с результатом выше. Полная повторная сборка с нуля этим скриптом пока NOT RUN.
+
+```powershell
+& .\tools\build-baseline-gui.ps1 -QtRoot $qt -DependencyRoot $prefix -BuildDirectory $build
+```
+
+Получен upstream `SagerNet/sing` v0.4.3 (`f7cd94b14d31ace655e3f2285463c2ebf30294aa`) — версия из текущего go.mod. Попытка core build с Go 1.27.2, `CGO_ENABLED=0`, `GOSUMDB=sum.golang.org`, `GOPROXY=https://proxy.golang.org,direct`:
+
+```powershell
+go build -mod=readonly -trimpath -tags 'with_clash_api,with_quic,with_utls,with_ech' -o $coreOutput .
+```
+
+**FAIL на линковке:** `github.com/sagernet/sing/common/control: invalid reference to net.errNoSuchInterface`. В `sing/common/control/bind_finder_default.go` действительно присутствует `//go:linkname` на приватный символ стандартной библиотеки. Ограничение документировано в [Go 1.23 release notes](https://go.dev/doc/go1.23#linker). `go.mod` и `go.sum` не изменились. Проверка `checklinkname` не отключалась. Это дефект совместимости старой зависимости, а не сетевой сбой. Нужен проверенный upstream fix/совместимый закреплённый fork; произвольное обновление или замена error sentinel без тестов неприемлемы.
+
+Go core build теперь **выполнен и FAILED**, запуск core/runtime — NOT RUN. Последняя GUI script-проверка использовала source `8b06edc` плюс новый untracked script, без изменения исходников приложения.
+
 1. Восстановить закреплённые checkout libneko/sing-box/sing-quic; установить происхождение `sing`, которого нет в `libs/get_source_env.sh`, но есть в Go replacements.
 2. Зафиксировать Windows toolchain и checksums SDK/dependency bundles; убрать прежние мутации manifests и персональные пути из build flow.
 3. Выполнить локальный baseline, затем обязательную чистую VM-сборку.
