@@ -10,6 +10,8 @@ namespace NekoGui_sub {
         using Validator = std::function<bool(const ManagedProfile &, QString &)>;
         explicit ManagedProfileStore(QString directory);
         bool load(int groupId, ManagedProfile &profile, QString &error) const;
+        // Both outputs come from one envelope read; neither changes on failure.
+        bool loadSnapshot(int groupId, ManagedProfile &profile, SubscriptionMetadata &metadata, QString &error) const;
         bool commit(int groupId, const QByteArray &source, const Validator &validate, QString &error);
         bool commit(int groupId, const QByteArray &source, const SubscriptionMetadata &metadata,
                     const Validator &validate, QString &error);

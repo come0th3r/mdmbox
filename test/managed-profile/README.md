@@ -103,8 +103,16 @@ and validator dependencies must be bound to the genuine adapters, not mock
 callbacks. The currently fixed core version is appropriate only for the pinned
 1.19.32 adapter. Provider provisioning, denial-stub detection, scheduler,
 reconnect and runtime selection are pending. Cancellation after the final
-pre-commit check cannot roll back a completed commit. Load metadata separately
-from source is not a combined snapshot API for future concurrent UI readers.
+pre-commit check cannot roll back a completed commit.
+
+`loadSnapshot` reads and validates source and metadata from one opened envelope;
+both outputs stay unchanged on failure. `load` and `loadMetadata` use that same
+reader, and commit validates previous metadata before replacing an envelope.
+Use `loadSnapshot` when a consumer needs a coherent pair; separate calls can
+still see different generations. Tests cover malformed metadata shape/entries,
+invalid counters, duplicate headers, preservation on failed read/replacement,
+and older envelopes without metadata (unknown values). No automatic corruption
+repair is performed. Concurrent Windows replacement/read stress remains pending.
 
 ## Installation identity
 

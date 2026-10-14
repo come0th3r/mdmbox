@@ -202,3 +202,18 @@ the extracted executable-preflight API (valid pin accepted, missing/wrong file
 rejected). This does not exercise GroupUpdater refresh against an HTTPS fixture.
 Group JSON roundtrip/migration, production group refresh, no-YAML build,
 installer inclusion, UI availability and runtime E2E remain **NOT RUN**.
+
+## Coherent snapshot and metadata integrity — 2026-10-15
+
+Added `ManagedProfileStore::loadSnapshot`: one envelope read provides source
+and metadata, with both outputs preserved on any error. Profile-only and
+metadata-only reads share the complete envelope validator. Replacement now
+refuses corrupt previous metadata, not only corrupt source/checksum. Older
+schema-1 envelopes without metadata still load with unknown metadata.
+
+Windows ordinary Release build **PASS**; backend CTest **1/1 PASS**; genuine
+pinned mihomo integration **PASS**, exit 0. New cases cover wrong metadata
+shape, malformed pairs/types, invalid counters, duplicate headers, coherent
+roundtrip, failure preservation and missing-metadata compatibility.
+Concurrent Windows read/replace stress and crash/disk-full recovery are still
+**NOT RUN**. No automatic repair or runtime rollback is implied.

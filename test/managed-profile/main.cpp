@@ -8,6 +8,9 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLockFile>
 #include <QTemporaryDir>
 #include <QTextStream>
@@ -172,6 +175,38 @@ int main(int argc, char **argv) {
         if (!lock.tryLock() || refresh(accept) || readBytes(servicePath) != serviceBytes) return 38;
     }
     QTextStream(stdout) << "SUBSCRIPTION_SERVICE_REFRESH_PASS\n";
+    if (!store.loadSnapshot(10, profile, loadedMetadata, error) || profile.source != source ||
+        loadedMetadata.title != serviceMetadata.title) return 41;
+    const auto snapshotHash = profile.sha256;
+    const auto snapshotTitle = loadedMetadata.title;
+    auto replaceEnvelope = [&](const QJsonObject &object) {
+        const auto bytes = QJsonDocument(object).toJson(QJsonDocument::Compact);
+        QFile file(servicePath);
+        return file.open(QIODevice::WriteOnly | QIODevice::Truncate) && file.write(bytes) == bytes.size();
+    };
+    const auto goodEnvelope = QJsonDocument::fromJson(serviceBytes).object();
+    for (const auto &badMetadata : QList<QJsonValue>{
+             QJsonObject{}, QJsonArray{QJsonArray{"Profile-Title"}},
+             QJsonArray{QJsonArray{"Profile-Title", 1}},
+             QJsonArray{QJsonArray{"Subscription-Userinfo", "total=-1"}},
+             QJsonArray{QJsonArray{"Profile-Title", "a"}, QJsonArray{"profile-title", "b"}}}) {
+        auto damaged = goodEnvelope;
+        damaged["metadata"] = badMetadata;
+        if (!replaceEnvelope(damaged)) return 42;
+        const auto damagedBytes = readBytes(servicePath);
+        if (store.loadSnapshot(10, profile, loadedMetadata, error) || profile.sha256 != snapshotHash ||
+            loadedMetadata.title != snapshotTitle || store.load(10, profile, error) ||
+            store.loadMetadata(10, loadedMetadata, error) ||
+            store.commit(10, updated, serviceMetadata, accept, error) ||
+            readBytes(servicePath) != damagedBytes) return 43;
+    }
+    auto oldEnvelope = goodEnvelope;
+    oldEnvelope.remove("metadata");
+    if (!replaceEnvelope(oldEnvelope) || !store.loadSnapshot(10, profile, loadedMetadata, error) ||
+        profile.source != source || !loadedMetadata.title.isEmpty() || loadedMetadata.total) return 44;
+    if (store.loadSnapshot(-1, profile, loadedMetadata, error) || profile.source != source) return 45;
+    if (!replaceEnvelope(goodEnvelope)) return 46;
+    QTextStream(stdout) << "MANAGED_SNAPSHOT_METADATA_INTEGRITY_PASS\n";
     if (NekoGui_sub::MihomoValidator::verifyExecutable(path, error) ||
         NekoGui_sub::MihomoValidator::verifyExecutable("missing.exe", error)) return 39;
     if (app.arguments().size() == 2) {

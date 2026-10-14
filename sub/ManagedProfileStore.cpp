@@ -27,7 +27,8 @@ namespace {
     }
 
     constexpr qint64 MaxEnvelopeBytes = 6 * 1024 * 1024;
-    bool read(const QString &path, int groupId, NekoGui_sub::ManagedProfile &profile, QString &error) {
+    bool read(const QString &path, int groupId, NekoGui_sub::ManagedProfile &profile,
+              NekoGui_sub::SubscriptionMetadata &metadata, QString &error) {
         QFile file(path);
         if (!file.open(QIODevice::ReadOnly) || file.size() > MaxEnvelopeBytes) {
             error = QStringLiteral("Managed profile unavailable or oversized");
@@ -54,7 +55,23 @@ namespace {
             error = QStringLiteral("Managed profile checksum mismatch");
             return false;
         }
+        QList<QPair<QByteArray, QByteArray>> headers;
+        if (object.contains("metadata") && !object.value("metadata").isArray()) {
+            error = QStringLiteral("Invalid managed metadata envelope");
+            return false;
+        }
+        for (const auto &entry : object.value("metadata").toArray()) {
+            const auto pair = entry.toArray();
+            if (pair.size() != 2 || !pair[0].isString() || !pair[1].isString()) {
+                error = QStringLiteral("Invalid managed metadata entry");
+                return false;
+            }
+            headers.append({pair[0].toString().toUtf8(), pair[1].toString().toUtf8()});
+        }
+        NekoGui_sub::SubscriptionMetadata candidateMetadata;
+        if (!NekoGui_sub::SubscriptionMetadata::parse(headers, candidateMetadata, error)) return false;
         profile = std::move(candidate);
+        metadata = std::move(candidateMetadata);
         return true;
     }
 
@@ -77,12 +94,18 @@ namespace NekoGui_sub {
     }
 
     bool ManagedProfileStore::load(int groupId, ManagedProfile &profile, QString &error) const {
+        SubscriptionMetadata metadata;
+        return loadSnapshot(groupId, profile, metadata, error);
+    }
+
+    bool ManagedProfileStore::loadSnapshot(int groupId, ManagedProfile &profile, SubscriptionMetadata &metadata,
+                                          QString &error) const {
         error.clear();
         if (groupId < 0) {
             error = QStringLiteral("Invalid group ID");
             return false;
         }
-        return read(path(groupId), groupId, profile, error);
+        return read(path(groupId), groupId, profile, metadata, error);
     }
 
     bool ManagedProfileStore::commit(int groupId, const QByteArray &source, const Validator &validate, QString &error) {
@@ -90,33 +113,8 @@ namespace NekoGui_sub {
     }
 
     bool ManagedProfileStore::loadMetadata(int groupId, SubscriptionMetadata &metadata, QString &error) const {
-        QLockFile lock(path(groupId) + QStringLiteral(".lock"));
-        if (!lock.tryLock(0)) {
-            error = QStringLiteral("Managed profile update already in progress");
-            return false;
-        }
         ManagedProfile profile;
-        if (!load(groupId, profile, error)) return false;
-        QFile file(path(groupId));
-        if (!file.open(QIODevice::ReadOnly) || file.size() > MaxEnvelopeBytes) {
-            error = QStringLiteral("Managed metadata unavailable");
-            return false;
-        }
-        const auto object = QJsonDocument::fromJson(file.read(MaxEnvelopeBytes + 1)).object();
-        QList<QPair<QByteArray, QByteArray>> headers;
-        if (object.contains("metadata") && !object.value("metadata").isArray()) {
-            error = QStringLiteral("Invalid managed metadata envelope");
-            return false;
-        }
-        for (const auto &entry : object.value("metadata").toArray()) {
-            const auto pair = entry.toArray();
-            if (pair.size() != 2 || !pair[0].isString() || !pair[1].isString()) {
-                error = QStringLiteral("Invalid managed metadata entry");
-                return false;
-            }
-            headers.append({pair[0].toString().toUtf8(), pair[1].toString().toUtf8()});
-        }
-        return SubscriptionMetadata::parse(headers, metadata, error);
+        return loadSnapshot(groupId, profile, metadata, error);
     }
 
     bool ManagedProfileStore::commit(int groupId, const QByteArray &source, const SubscriptionMetadata &metadata,
@@ -149,7 +147,8 @@ namespace NekoGui_sub {
         const auto current = path(groupId);
         if (QFile::exists(current)) {
             ManagedProfile previous;
-            if (!read(current, groupId, previous, error)) return false; // Never overwrite corruption silently.
+            SubscriptionMetadata previousMetadata;
+            if (!read(current, groupId, previous, previousMetadata, error)) return false; // Never overwrite corruption silently.
             QFile file(current);
             if (!file.open(QIODevice::ReadOnly)) {
                 error = QStringLiteral("Previous managed snapshot unavailable");
