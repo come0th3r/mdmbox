@@ -191,6 +191,27 @@ Windows/System32 и без Qt plugin/WebEngine overrides — **PASS**, выво�
 roundtrip, WebEngineWidgets view/rendering, комплектность runtime dependencies
 и изолированный запуск MDMBOX остаются следующими задачами.
 
+### QWebChannel roundtrip
+
+Тот же smoke target расширен QObject bridge с `Q_INVOKABLE echo` и
+`complete`; включён AUTOMOC. HTML загружает `qrc:///qtwebchannel/qwebchannel.js`,
+регистрирует клиент через `qt.webChannelTransport`, вызывает C++ echo,
+получает callback и отправляет ответ в C++ complete. Успех — только при
+точном ответе `cpp:MDMBOX_LOCAL_HTML:42`; timeout остаётся 30 секунд.
+
+Rebuild и deployment в отдельный новый каталог на Windows-стенде — **PASS**.
+Запуск без SDK в PATH, без отключения sandbox — **PASS**:
+
+```text
+WEBENGINE_LOCAL_HTML_JS_PASS Qt=6.7.2
+WEBENGINE_QWEBCHANNEL_ROUNDTRIP_PASS Qt=6.7.2
+```
+
+Warnings отсутствующей SerialPort/NMEA dependency и VMware software
+rendering/Vulkan/DPI повторились; они остаются незакрытыми. Этот результат
+подтверждает synthetic JS → C++ → JS → C++ roundtrip, но не production bridge,
+визуальный вывод, startup MDMBOX или clean-VM deployment.
+
 1. Восстановить закреплённые checkout libneko/sing-box/sing-quic; установить происхождение `sing`, которого нет в `libs/get_source_env.sh`, но есть в Go replacements.
 2. Зафиксировать Windows toolchain и checksums SDK/dependency bundles; убрать прежние мутации manifests и персональные пути из build flow.
 3. Выполнить локальный baseline, затем обязательную чистую VM-сборку.

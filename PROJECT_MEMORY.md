@@ -64,6 +64,8 @@
 
 Qt runtime smoke: самостоятельный `test/webengine-smoke` собран и развёрнут windeployqt в новом каталоге на стенде; запуск без Qt SDK в PATH PASS (`WEBENGINE_LOCAL_HTML_JS_PASS Qt=6.7.2`), sandbox не отключён. Проверены local HTML load и JS, QWebChannel установлен, но roundtrip не проверен. Warnings: NMEA plugin missing Qt6SerialPort.dll, VMware SVGA → LLVMPipe, Vulkan/GPU detection и DPI awareness failed. Полнота deployment/GPU/DPI/visual gates не закрыты; это не запуск MDMBOX и не clean VM. Далее исправить/ограничить deployment dependencies, проверить bridge roundtrip и isolated MDMBOX startup; pinned bootstrap тоже незавершён.
 
+WebEngine smoke расширен Q_OBJECT bridge (echo + complete), JS загружает локальный Qt qwebchannel.js и проверяет C++ reply; добавлен AUTOMOC. Rebuild/deploy в новый `webengine-channel-deploy` и runtime без SDK PATH — PASS: `WEBENGINE_LOCAL_HTML_JS_PASS` и `WEBENGINE_QWEBCHANNEL_ROUNDTRIP_PASS`, Qt 6.7.2. Sandbox не отключался. Warnings SerialPort/NMEA, VMware LLVMPipe/Vulkan/GPU/DPI сохраняются. Проверен synthetic bridge отдельного target, не production bridge MDMBOX. Далее — закрыть runtime dependency warning и isolated client startup, затем pinned bootstrap; release gates не закрыты.
+
 При начале реализации проверено: `beta-ilya` отслеживает `origin/beta-ilya`, HEAD `d124815`, рабочее дерево было чистым, staged diff пустым. Эти значения не заменяют новую проверку git в следующей сессии.
 
 ### Следующая рабочая задача
