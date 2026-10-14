@@ -253,3 +253,17 @@ No distinct denial reason is inferred from translated text. URI/sing-box
 notice paths, denial headers and live panel responses remain **NOT RUN** here.
 Blocked-user/expired/exhausted handling beyond existing metadata checks is not
 claimed. Future upstream notice shape changes require renewed contract tests.
+
+## Production-mode TLS downloader — 2026-10-15
+
+Added opt-in QSslSocket loopback TLS fixture without the HTTP test exception.
+Synthetic localhost-only RSA certificate/key generated outside Git with two-day
+validity; trust changes are test-process-local, not OS-wide. Windows build/CTest
+with fixture paths **3/3 PASS** (TLS 23.57 seconds): trusted HTTPS body/metadata/
+HWID, untrusted certificate and hostname mismatch refused before HTTP delivery,
+redirect with no follow-up, truncated response and chunked body >4 MiB refused
+with previous result preserved. Genuine downloader unchanged; no TLS bypass.
+
+Certificate expiry/revocation, proxy/header bounds and HTTPS GroupUpdater → real
+validator → store success remain **NOT RUN**. Regenerate expired fixtures.
+Without both fixture paths, CTest registers only the original two tests.

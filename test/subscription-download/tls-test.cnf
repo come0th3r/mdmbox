@@ -1,0 +1,12 @@
+# Synthetic localhost-only certificate. Never use for production TLS.
+[req]
+distinguished_name = dn
+x509_extensions = test_ext
+prompt = no
+[dn]
+CN = localhost
+[test_ext]
+subjectAltName = DNS:localhost
+basicConstraints = critical,CA:TRUE
+keyUsage = critical,digitalSignature,keyEncipherment,keyCertSign
+extendedKeyUsage = serverAuth
