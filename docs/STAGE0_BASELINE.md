@@ -235,6 +235,29 @@ VMware LLVMPipe/Vulkan/GPU/DPI warnings сохраняются. Наличие r
 Запуск самого MDMBOX пока NOT RUN: перед ним проверить startup/shutdown
 side effects, отдельный data directory и отсутствие изменения system proxy.
 
+### Изолированное наблюдение запуска MDMBOX
+
+Сам клиент развёрнут в новый `client-startup-deploy` через windeployqt в
+x64 VsDevCmd; рядом проверенное ядро. Запуск `-many -appdata <new-empty-dir>`
+без Qt SDK в PATH. Данные пользователя/подписки не использовались.
+Audit defaults: spmode_system_proxy/spmode_vpn false, remember_id -1919,
+remember_spmode empty. Startup умеет восстанавливать эти режимы из сохранённых
+данных, поэтому пустой data directory обязателен для этой проверки.
+
+Результат через 12 секунд — **PARTIAL**, не полноценный startup PASS:
+
+- Клиент жив; прямые дочерние процессы `QtWebEngineProcess.exe` и `nekobox_core.exe` присутствуют.
+- `MainWindowHandle=0`, title empty: отображение окна не подтверждено.
+- `newdesign` отсутствует. `navigate()` возвращает управление без загрузки страницы; это известный дефект отсутствующих shell assets, а не готовый UI.
+- Значения HKCU Internet Settings ProxyEnable/ProxyServer/ProxyOverride/AutoConfigURL совпали до запуска, во время наблюдения и после очистки. Это не аудит всех системных сетевых настроек.
+- В stderr VMware SVGA fallback LLVMPipe.
+
+Созданный клиент и наблюдавшиеся прямые дети принудительно завершены.
+Graceful shutdown, RPC handshake/readiness, потомки второго уровня, окно и
+production bridge **NOT VERIFIED**. Наличие процесса ядра не доказывает
+успешный RPC. Далее исследовать окно/assets и оформить проверяемый startup/
+shutdown harness; clean-VM/installer gates остаются NOT RUN.
+
 1. Восстановить закреплённые checkout libneko/sing-box/sing-quic; установить происхождение `sing`, которого нет в `libs/get_source_env.sh`, но есть в Go replacements.
 2. Зафиксировать Windows toolchain и checksums SDK/dependency bundles; убрать прежние мутации manifests и персональные пути из build flow.
 3. Выполнить локальный baseline, затем обязательную чистую VM-сборку.
