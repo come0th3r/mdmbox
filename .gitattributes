@@ -1,0 +1,3 @@
+# Unified diffs contain context-prefix spaces before original tabs/blank lines.
+# Preserve portable patch bytes and do not lint their context as source code.
+libs/patches/*.patch text eol=lf -whitespace

@@ -1,0 +1,25 @@
+diff --git a/common/control/bind_finder_default.go b/common/control/bind_finder_default.go
+--- a/common/control/bind_finder_default.go
++++ b/common/control/bind_finder_default.go
+@@ -6,6 +6,7 @@ import (
+ 	_ "unsafe"
+ 
+ 	"github.com/sagernet/sing/common"
++	E "github.com/sagernet/sing/common/exceptions"
+ 	M "github.com/sagernet/sing/common/metadata"
+ )
+ 
+@@ -74,6 +75,3 @@
+-//go:linkname errNoSuchInterface net.errNoSuchInterface
+-var errNoSuchInterface error
+-
+ func (f *DefaultInterfaceFinder) InterfaceByAddr(addr netip.Addr) (*Interface, error) {
+ 	for _, netInterface := range f.interfaces {
+ 		for _, prefix := range netInterface.Addresses {
+@@ -96,5 +94,5 @@
+ 			}
+ 		}
+ 	}
+-	return nil, &net.OpError{Op: "route", Net: "ip+net", Source: nil, Addr: &net.IPAddr{IP: addr.AsSlice()}, Err: errNoSuchInterface}
++	return nil, &net.OpError{Op: "route", Net: "ip+net", Source: nil, Addr: &net.IPAddr{IP: addr.AsSlice()}, Err: E.New("no such network interface")}
+ }

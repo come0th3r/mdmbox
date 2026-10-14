@@ -100,6 +100,24 @@ go build -mod=readonly -trimpath -tags 'with_clash_api,with_quic,with_utls,with_
 
 Go core build теперь **выполнен и FAILED**, запуск core/runtime — NOT RUN. Последняя GUI script-проверка использовала source `8b06edc` плюс новый untracked script, без изменения исходников приложения.
 
+### Устранение linkname blocker, 2026-10-15
+
+Найден upstream commit `SagerNet/sing@a33349366d899068145f2d0e3ea0f5b2632fa3f2`
+(“Remove bad linkname usage”). Его однофайловое изменение перенесено на
+закреплённый v0.4.3 без обновления остальных API: `libs/patches/sing-v0.4.3-linkname.patch`.
+`git apply --check`, применение и dependency diff-check — PASS. Dependency checkout
+теперь **модифицирован этим патчем**, а не является чистым upstream tag.
+
+- Core build с прежними tags, `-mod=readonly`, Go 1.27.2, CGO disabled и включёнными checksum/linker checks — **PASS**.
+- `nekobox_core.exe version` — **PASS**: sing-box `1.9.7-neko-1`, NekoBox `N/A`, revision `8b06edcf341fb4baa6d2ffe4532eab93aab57ccd`. N/A не заменялось вымышленной версией; build metadata ещё нужно согласовать.
+- Core SHA256: `D28E54C410C09981181DEBFED373002ACA49EEFD5E8954D90E52A819665BED31`.
+- Штатный `go test ./common/control` сообщил `[no test files]`, это не функциональное покрытие.
+- Выполнены две дополнительные проверки из `test/fixtures/sing-control-compat_test.go`, явно скопированного в dependency checkout: cached IPv4/IPv6/name/index lookup и missing-interface `net.OpError` — **2/2 PASS**. Адреса synthetic, интерфейсы не создавались; fallback только читает системные интерфейсы.
+- `core check` синтетического direct-only config без inbounds — **PASS**; неизвестный outbound type отклонён с ненулевым exit code — **PASS**.
+- Manifests приложения не менялись. На стенде остаётся ранее скопированный untracked GUI script; перед pull сопоставить с tracked версией, не удалять чужие файлы.
+
+Это снимает прежний blocker **компиляции ядра**, но не доказывает proxy/TUN/RPC или протокольную совместимость. GUI/WebEngine deployment/runtime, loopback connection smoke, E2E и чистая VM — NOT RUN. Обычный build не должен неявно применять патчи; закреплённый bootstrap ещё предстоит оформить.
+
 1. Восстановить закреплённые checkout libneko/sing-box/sing-quic; установить происхождение `sing`, которого нет в `libs/get_source_env.sh`, но есть в Go replacements.
 2. Зафиксировать Windows toolchain и checksums SDK/dependency bundles; убрать прежние мутации manifests и персональные пути из build flow.
 3. Выполнить локальный baseline, затем обязательную чистую VM-сборку.
