@@ -1,5 +1,6 @@
 #include "../../sub/ManagedProfile.hpp"
 #include "../../sub/ManagedProfileStore.hpp"
+#include "../../sub/MihomoValidator.hpp"
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -77,5 +78,30 @@ int main(int argc, char **argv) {
     if (!QDir().mkdir(otherPath + ".previous") || store.commit(8, updated, accept, error) ||
         readBytes(otherPath) != otherOriginal) return 13;
     QTextStream(stdout) << "MANAGED_PROFILE_STORE_PASS\n";
+    if (app.arguments().size() == 2) {
+        const auto exe = app.arguments().at(1);
+        QByteArray valid = source;
+        valid.replace("rule-providers: {synthetic: {type: file, path: rules/synthetic.yaml}}\n", "");
+        NekoGui_sub::ManagedProfile candidate;
+        if (!NekoGui_sub::ManagedProfile::ParseMihomo(valid, candidate, error) ||
+            !NekoGui_sub::MihomoValidator::validate(exe, candidate, error)) {
+            QTextStream(stderr) << error << "\n";
+            return 14;
+        }
+        auto invalid = valid;
+        invalid.replace("type: socks5", "type: deliberately-unsupported");
+        if (!NekoGui_sub::ManagedProfile::ParseMihomo(invalid, candidate, error) ||
+            NekoGui_sub::MihomoValidator::validate(exe, candidate, error)) return 15;
+        const auto coreValidate = [&](const NekoGui_sub::ManagedProfile &p, QString &e) {
+            return NekoGui_sub::MihomoValidator::validate(exe, p, e);
+        };
+        if (!store.commit(9, valid, coreValidate, error)) return 16;
+        const auto runtimePath = QDir(directory.path()).filePath("9.json");
+        const auto runtimeBytes = readBytes(runtimePath);
+        if (store.commit(9, invalid, coreValidate, error) || readBytes(runtimePath) != runtimeBytes ||
+            NekoGui_sub::MihomoValidator::validate(path, candidate, error) ||
+            NekoGui_sub::MihomoValidator::validate("missing.exe", candidate, error)) return 17;
+        QTextStream(stdout) << "PINNED_MIHOMO_VALIDATOR_PASS\n";
+    }
     return 0;
 }

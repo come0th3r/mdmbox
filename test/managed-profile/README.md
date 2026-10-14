@@ -43,3 +43,24 @@ lock recovery and metadata/active-runtime rollback are not tested here.
 Envelopes and snapshots contain private profile material (Base64 is not
 encryption); production must keep them under protected application data and
 exclude them from exported logs and Git.
+
+## Real mihomo validation
+
+Run `mdmbox_managed_profile_tests.exe <absolute-path-to-pinned-mihomo.exe>`
+to additionally test the real validator and store/validator integration.
+The baseline artifact/hash is recorded in `libs/mihomo-windows-baseline.json`.
+Without that argument CTest runs only the structural/store suite.
+
+`MihomoValidator` checks the executable SHA256, clears inherited `CLASH_*`
+overrides, uses a temporary home and sends the profile through stdin with
+`-t -d <temporary-home> -f -`. Upstream v1.19.32 skips config.Init for stdin
+and exits before runtime application in test mode. stdout/stderr are sent to
+the null device; no private profile material is passed in arguments or logs.
+Startup is bounded to 5 seconds, config check to 15 seconds; timeout kills
+the child. The synchronous adapter must run on a worker thread.
+
+This is not an OS sandbox: config parsing may access referenced local files
+or fetch geodata/providers. Network/filesystem confinement, subprocess memory
+limits, timeout/crash fault injection, executable TOCTOU protection and
+provider/cache provisioning remain pending. The hard-coded Windows baseline
+hash deliberately rejects other binaries, even ones reporting the same version.

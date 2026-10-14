@@ -1,0 +1,11 @@
+{
+  "version": "v1.19.32",
+  "platform": "windows-amd64-v1",
+  "archiveUrl": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-windows-amd64-v1-v1.19.32.zip",
+  "archiveSha256": "00549b347d8e124600e46cac67d59293358454f465e9d86d2511567da56b7029",
+  "executableName": "mihomo-windows-amd64-v1.exe",
+  "executableSha256": "0b54ea7b10e26f6ca628b49e77c13ad9b2587b23393a5b715769cbaeed012af6",
+  "reportedGoVersion": "go1.26.8",
+  "reportedTags": ["with_gvisor"],
+  "status": "config-validation-baseline-not-protocol-approval"
+}

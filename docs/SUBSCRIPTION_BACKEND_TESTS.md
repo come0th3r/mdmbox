@@ -74,3 +74,30 @@ data ACLs, disk-full, power-loss/process-crash injection, stale-lock recovery,
 metadata and running-core rollback remain **NOT RUN / NOT IMPLEMENTED**.
 Single-file atomic replacement does not constitute a complete subscription
 transaction. Snapshot/profile files are private data, not encrypted by Base64.
+
+## Pinned real mihomo config validation — 2026-10-15
+
+Official `v1.19.32` Windows amd64-v1 archive obtained; archive SHA256 matched
+the GitHub release API digest. Exact artifact and executable hashes are in
+`libs/mihomo-windows-baseline.json`. `-v` reported `Mihomo Meta v1.19.32 windows
+amd64 with go1.26.8`, build time Sep 30 2026, tag `with_gvisor`. Download/version
+output was observed, though that SSH wrapper later timed out; the subsequent
+validator integration completed normally and verified the executable hash.
+
+`MihomoValidator` uses checksum-pinned binary, cleared CLASH environment,
+temporary home, stdin config, discarded stdout/stderr and bounded wait/kill.
+Upstream flags/control flow checked in `MetaCubeX/mihomo@v1.19.32/main.go`.
+
+Windows build + base CTest: **PASS**. Real binary integration exit 0: **PASS**:
+
+- synthetic SOCKS full profile accepted;
+- structurally accepted unknown protocol rejected by real core;
+- store commit using real validator succeeds for valid config;
+- rejected replacement preserves existing envelope bytes;
+- missing executable and wrong checksum rejected.
+
+No external VPN session, protocol matrix or live mikan profile was exercised.
+Timeout/crash injection, subprocess memory limits, network/file confinement,
+provider provisioning, core runtime management and refresh integration remain
+**NOT RUN / NOT IMPLEMENTED**. Config-check may access external resources;
+temporary home is isolation of data, not an OS security sandbox.
