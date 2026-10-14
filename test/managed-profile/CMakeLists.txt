@@ -11,3 +11,7 @@ target_sources(mdmbox_managed_profile_tests PRIVATE ../../sub/ManagedRuntimePoli
 target_link_libraries(mdmbox_managed_profile_tests PRIVATE Qt6::Core yaml-cpp)
 enable_testing()
 add_test(NAME managed-profile COMMAND mdmbox_managed_profile_tests)
+find_package(Qt6 REQUIRED COMPONENTS Network)
+add_executable(mdmbox_managed_runtime_smoke runtime.cpp ../../sub/ManagedProfile.cpp ../../sub/ManagedRuntimePolicy.cpp ../../sub/MihomoValidator.cpp)
+target_link_libraries(mdmbox_managed_runtime_smoke PRIVATE Qt6::Core Qt6::Network yaml-cpp)
+# Explicit binary argument required; ordinary CTest does not start a runtime.

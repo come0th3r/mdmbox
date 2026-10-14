@@ -114,6 +114,22 @@ invalid counters, duplicate headers, preservation on failed read/replacement,
 and older envelopes without metadata (unknown values). No automatic corruption
 repair is performed. Concurrent Windows replacement/read stress remains pending.
 
+## Explicit runtime smoke
+
+Build also produces `mdmbox_managed_runtime_smoke.exe`. Invoke manually with
+the absolute pinned mihomo executable path. Ordinary CTest never starts it.
+It verifies hash/config, starts a synthetic loopback-only projected profile
+with temporary home and random in-memory API token, waits for authenticated
+version API readiness, checks unauthenticated 401 and mixed TCP listener,
+then terminates/kills its own child and checks both ports are unavailable.
+No system proxy/TUN changes or external VPN sessions are requested.
+
+Windows observed PASS, `forced=1`: terminate did not stop the console core in
+two seconds, so bounded kill fallback was required. This is NOT graceful
+shutdown proof. Actual proxy data path, production lifecycle integration,
+process-tree cleanup, bind-race resilience and OS snapshot checks are pending.
+Dynamic port reservation is released before start and cannot eliminate races.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

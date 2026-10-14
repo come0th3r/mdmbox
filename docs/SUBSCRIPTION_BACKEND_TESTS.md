@@ -335,3 +335,17 @@ Windows production build **PASS**, backend CTest **1/1 PASS**, real projected
 mihomo config-check **PASS** exit 0. Eight negative nested-option cases preserve
 the previous projection. This restricted contract is not broad mikan protocol
 support or an OS sandbox. Actual start/API/data path/shutdown still **NOT RUN**.
+
+## First actual managed runtime smoke — 2026-10-15
+
+Separate opt-in executable (not ordinary CTest) starts checksum-verified mihomo
+using genuine restricted projection and temporary home. Windows **PASS**, exit
+0: config-check, authenticated /version readiness (1.19.32), missing-token 401,
+authorized 200, loopback mixed TCP listener, child exit and both ports closed.
+Random API token remains in memory and is not printed. Base CTest **1/1 PASS**.
+
+Observed `forced=1`: QProcess terminate needed bounded kill fallback on Windows.
+Graceful shutdown **NOT RUN/UNRESOLVED**, not PASS. Proxy data path, production
+CoreManager integration, second-level children, bind races, OS proxy/DNS/route
+snapshots and clean VM remain **NOT RUN**. Startup connection-refused polling
+emitted Qt device-not-open warning; no raw core logs were collected.

@@ -110,6 +110,8 @@ Isolated startup observation завершена: новые client-startup-deplo
 
 После `37a9272` narrowed nested runtime execution contract: SOCKS5 scalar options only, select→proxy/DIRECT/REJECT без group cycles, simple IP DNS/reviewed profile keys. Unknown options/other protocols/health checks/URL resolvers/hosts/additional DNS refused, source storage unaffected. Windows production build PASS/backend CTest 1/1 PASS/real projected config-check PASS exit 0; 8 negative nested tests preserve previous projection. IPv4 regex lexical only, real core check mandatory. Далее standalone runtime lifecycle/readiness/API auth/data path/stop smoke; НЕ broad protocol support/OS sandbox.
 
+После `302ddd2` добавлен explicit mdmbox_managed_runtime_smoke (не auto CTest): hash+config-check → real projected loopback mihomo start → authenticated version readiness/401 без token/200 с token/mixed TCP listener → child stop/closed ports. Windows PASS exit 0, base CTest 1/1 PASS. forced=1: terminate Windows console core не остановил, kill fallback; graceful shutdown unresolved, НЕ PASS. Random API token in-memory/no logs, temporary home. Data path/production lifecycle/process-tree/bind races/OS snapshots NOT RUN. Далее real loopback HTTP data path + корректный Windows graceful lifecycle, затем production CoreManager; отдельный commit каждого изменения.
+
 1. Проверить branch/status и перечитать незавершённые пункты этапа 0 в плане.
 2. Проверить установленные Qt/MSVC/CMake/Ninja/Go и сборочные scripts, не запускать разрушительную пересборку до их аудита.
    Использовать предоставленный удалённый Windows-стенд: SSH уже проверен; следующий шаг — отдельный checkout и полный preflight, затем подготовка недостающих SDK. Не считать стенд чистой VM без проверки.
