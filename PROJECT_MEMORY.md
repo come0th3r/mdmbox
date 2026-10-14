@@ -58,6 +58,8 @@
 
 **Ещё не сделано:** реализация managed subscriptions/mihomo, новая вёрстка, интеграция, полная clean-VM baseline-проверка, runtime/E2E/visual tests, beta/stable release. Предлагаемые `SubscriptionService`, `ManagedProfileService`, `CoreManager` и `ui/shell/` — будущие элементы, а не готовый код.
 
+Последняя проверка data path: добавлен `tools/core-loopback-smoke.mjs`; на стенде Node.js 24.21.0 дважды PASS HTTP inbound → direct outbound → локальный HTTP origin, по одному запросу. Syntax PASS, несуществующий core ожидаемо отклонён с exit 1; повторный успешный запуск PASS. Скрипт использует только synthetic config/loopback, очищает свои процессы/временный каталог, не меняет proxy/TUN/routes. Локально Node по PATH не найден, локальный запуск не выполнен. Внешние VPN-протоколы/RPC/TUN/DNS-политика не проверены. Далее оформить pinned bootstrap/core build и Qt deployment/WebEngine runtime smoke.
+
 При начале реализации проверено: `beta-ilya` отслеживает `origin/beta-ilya`, HEAD `d124815`, рабочее дерево было чистым, staged diff пустым. Эти значения не заменяют новую проверку git в следующей сессии.
 
 ### Следующая рабочая задача

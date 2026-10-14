@@ -118,6 +118,33 @@ Go core build теперь **выполнен и FAILED**, запуск core/run
 
 Это снимает прежний blocker **компиляции ядра**, но не доказывает proxy/TUN/RPC или протокольную совместимость. GUI/WebEngine deployment/runtime, loopback connection smoke, E2E и чистая VM — NOT RUN. Обычный build не должен неявно применять патчи; закреплённый bootstrap ещё предстоит оформить.
 
+### Loopback data-path smoke
+
+Добавлен `tools/core-loopback-smoke.mjs`. Node.js создаёт HTTP origin на
+`127.0.0.1` с ephemeral port и временный synthetic config ядра с HTTP inbound
+на другом loopback port и direct outbound. После readiness выполняется один
+HTTP proxy request; проверяются status 200, точный body, число origin requests
+и отсутствие преждевременного завершения ядра. В `finally` останавливается
+только созданный процесс ядра, закрывается origin и удаляется только созданный
+скриптом временный каталог. Порт proxy резервируется перед стартом; возможная
+гонка занятия порта считается ошибкой проверки, а не успехом.
+
+```powershell
+node tools/core-loopback-smoke.mjs <path-to-nekobox_core.exe>
+```
+
+На Windows-стенде с Node.js 24.21.0 и patched core выше:
+
+- `node --check` — PASS.
+- Loopback HTTP inbound → direct outbound → origin — PASS два последовательных запуска, ровно один origin request каждый раз.
+- Несуществующий core executable — ожидаемый FAIL с exit code 1, без зависания; затем повторный положительный запуск — PASS.
+
+Локальный вызов Node по PATH не выполнен (команда не найдена); все указанные
+результаты получены на удалённом стенде. Проверка не читает реальные профили,
+не меняет system proxy/TUN/routes и не обращается к внешнему origin.
+**NOT TESTED:** RPC, DNS-политика, VPN-протоколы, TUN и внешние соединения.
+GUI/WebEngine deployment/runtime и clean-VM gate остаются NOT RUN.
+
 1. Восстановить закреплённые checkout libneko/sing-box/sing-quic; установить происхождение `sing`, которого нет в `libs/get_source_env.sh`, но есть в Go replacements.
 2. Зафиксировать Windows toolchain и checksums SDK/dependency bundles; убрать прежние мутации manifests и персональные пути из build flow.
 3. Выполнить локальный baseline, затем обязательную чистую VM-сборку.
