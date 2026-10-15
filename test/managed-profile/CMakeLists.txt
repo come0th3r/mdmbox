@@ -16,6 +16,7 @@ add_executable(mdmbox_managed_runtime_smoke runtime.cpp ../../sub/ManagedProfile
 target_link_libraries(mdmbox_managed_runtime_smoke PRIVATE Qt6::Core Qt6::Network yaml-cpp)
 target_sources(mdmbox_managed_runtime_smoke PRIVATE ../../sub/ManagedControllerProbe.cpp)
 target_sources(mdmbox_managed_runtime_smoke PRIVATE ../../sub/CoreOwnership.cpp)
+target_sources(mdmbox_managed_runtime_smoke PRIVATE ../../sub/ManagedSession.cpp ../../sub/ManagedProfileStore.cpp ../../sub/SubscriptionContract.cpp)
 add_executable(mdmbox_controller_probe_tests controller.cpp ../../sub/ManagedControllerProbe.cpp)
 target_link_libraries(mdmbox_controller_probe_tests PRIVATE Qt6::Core Qt6::Network)
 add_test(NAME controller-probe COMMAND mdmbox_controller_probe_tests)

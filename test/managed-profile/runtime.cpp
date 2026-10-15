@@ -2,6 +2,8 @@
 #include "../../sub/MihomoValidator.hpp"
 #include "../../sub/ManagedCoreProcess.hpp"
 #include "../../sub/CoreOwnership.hpp"
+#include "../../sub/ManagedSession.hpp"
+#include <QDateTime>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QEventLoop>
@@ -218,5 +220,40 @@ int main(int argc, char **argv) {
     if (!reaped || !portsClosed()) return 33;
     QTextStream(stdout) << "MIHOMO_DESTRUCTOR_CHILD_CLEANUP_PASS\n";
 #endif
+    QTemporaryDir snapshots;
+    if (!snapshots.isValid()) return 38;
+    NekoGui_sub::ManagedProfileStore store(snapshots.path());
+    const auto validate = [&](const NekoGui_sub::ManagedProfile &candidate, QString &e) {
+        return NekoGui_sub::MihomoValidator::validate(executable, candidate, e);
+    };
+    if (!store.commit(71, source, validate, error)) return 39;
+    NekoGui_sub::ManagedSession session;
+    if (session.start(store, 71, executable, mixedPort, apiPort, 0, error) || session.processId() != 0) return 47;
+    if (!ownership.acquire(Ownership::Owner::Legacy, error)) return 48;
+    if (session.start(store, 71, executable, mixedPort, apiPort, 10000, error) ||
+        session.groupId() != -1 || session.processId() != 0 || ownership.owner() != Ownership::Owner::Legacy) return 49;
+    if (!ownership.release(Ownership::Owner::Legacy, error)) return 50;
+    if (session.start(store, 999, executable, mixedPort, apiPort, 10000, error) ||
+        session.groupId() != -1 || session.processId() != 0) return 40;
+    if (!session.start(store, 71, executable, mixedPort, apiPort, 10000, error) ||
+        session.groupId() != 71 || session.state() != NekoGui_sub::ManagedCoreProcess::State::Ready) return 41;
+    const auto sessionPid = session.processId();
+    if (session.start(store, 72, executable, mixedPort, apiPort, 10000, error) ||
+        session.processId() != sessionPid || session.groupId() != 71) return 42;
+    if (!session.stop(error) || session.groupId() != -1 || session.processId() != 0 || !portsClosed()) return 43;
+    NekoGui_sub::ManagedProfile saved;
+    if (!store.load(71, saved, error) || saved.source != source) return 44;
+    NekoGui_sub::SubscriptionMetadata expired;
+    expired.expiry = QDateTime::currentSecsSinceEpoch() - 60;
+    if (!store.commit(72, source, expired, validate, error) ||
+        session.start(store, 72, executable, mixedPort, apiPort, 10000, error) || session.processId() != 0) return 45;
+    NekoGui_sub::SubscriptionMetadata exhausted;
+    exhausted.total = 10;
+    exhausted.download = 10;
+    exhausted.upload = 0;
+    if (!store.commit(73, source, exhausted, validate, error) ||
+        session.start(store, 73, executable, mixedPort, apiPort, 10000, error) || session.processId() != 0) return 51;
+    if (!session.start(store, 71, executable, mixedPort, apiPort, 10000, error) || !session.stop(error)) return 46;
+    QTextStream(stdout) << "MANAGED_SNAPSHOT_SESSION_READINESS_STOP_PASS\n";
     return 0;
 }

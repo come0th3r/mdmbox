@@ -413,6 +413,24 @@ production revision build PASS). This exercises actual event production with a
 synthetic child, not nekobox RPC or the real GUI consumer. Failed restart,
 unconfirmed kill, descendant/OS cleanup and recovery remain NOT RUN.
 
+### Snapshot-backed managed session
+
+`ManagedSession` is a worker-thread-only service compiled into ordinary
+YAML-enabled builds. It loads profile and metadata together by existing group
+ID, refuses expired/exhausted snapshots, generates an in-memory API token and
+starts the reviewed loopback runtime through authenticated readiness. Stop
+uses the production platform adapter. Duplicate starts/group switches require
+explicit stop. Ready is not VPN connected; no OS proxy/TUN/DNS/routes enabled.
+
+Windows production build PASS, CTest6/6 PASS, parser39/39 plus previous process
+fixtures PASS, two full real-mihomo runtime runs PASS exit0/forced0.
+`MANAGED_SNAPSHOT_SESSION_READINESS_STOP_PASS` covers real-validator store
+commit → snapshot → session readiness → graceful stop/closed ports → restart,
+unchanged source, missing snapshot, invalid timeout, synthetic Legacy hold,
+duplicate group switch/PID preservation and expired/exhausted refusal.
+Production UI/application-state wiring, active refresh/reconnect, unconfirmed
+cleanup fault injection and legacy recovery remain pending.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under
