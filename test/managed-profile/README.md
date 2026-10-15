@@ -499,6 +499,24 @@ and fixed-port collisions NOT RUN. Reciprocal system-mode guards during
 pending/active managed sessions are still required before exposing commands;
 application flags are not OS-state verification.
 
+### Reciprocal legacy/system-mode guards
+
+MainWindow refuses legacy start, system proxy/TUN enable and direct
+StartVPNProcess before side effects while the managed controller is pending,
+has an active group/live PID, or shared ownership belongs to Managed. Disable
+remains available for cleanup. Managed start also refuses a nonzero vpn_pid.
+
+Windows production/fixture builds PASS, CTest6/6 PASS,
+`MANAGED_RECIPROCAL_MODE_POLICY_PASS cases=32`, launch policy67 PASS,
+parser39/39 and real process fixtures PASS, full real-mihomo runtime PASS
+exit0/forced0 (`RECIPROCAL_GUARD_REGRESSION_PASS`). A repeated PowerShell
+stderr-redirection harness stopped at the known offscreen OpenGL warning;
+rerunning without that redirection completed successfully.
+Actual MainWindow/GUI mode-transition E2E, no-YAML and OS-state verification
+are NOT RUN. These are application-state guards, not a cross-thread OS
+transaction. QWebChannel mutation commands remain unexposed pending the
+command/result bridge contract and its end-to-end tests.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

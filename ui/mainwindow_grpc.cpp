@@ -311,6 +311,10 @@ void MainWindow::neko_start(int _id) {
 
     auto group = NekoGui::profileManager->GetGroup(ent->gid);
     if (group == nullptr || group->archive) return;
+    if (managedBlocksLegacy()) {
+        MW_show_log(QStringLiteral("Legacy start refused: stop the managed loopback session first"));
+        return;
+    }
 
     auto result = BuildConfig(ent, false, false);
     if (!result->error.isEmpty()) {

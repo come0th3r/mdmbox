@@ -148,6 +148,13 @@ int main(int argc, char **argv) {
         if (ManagedLaunchPolicy::allow(true, false, kind, false, false, false, false, error) || error.isEmpty()) return 34;
     }
     QTextStream(stdout) << "MANAGED_LAUNCH_POLICY_MATRIX_PASS cases=67\n";
+    for (int bits = 0; bits < 32; ++bits) {
+        const bool enable = bits & 1, pending = bits & 2, group = bits & 4,
+                   process = bits & 8, owner = bits & 16;
+        const bool expected = !enable || !(pending || group || process || owner);
+        if (ManagedLaunchPolicy::allowLegacyOperation(enable, pending, group, process, owner) != expected) return 35;
+    }
+    QTextStream(stdout) << "MANAGED_RECIPROCAL_MODE_POLICY_PASS cases=32\n";
     QTextStream(stdout) << "CORE_SINGLE_OWNER_ARBITRATION_PASS\n";
     return 0;
 }

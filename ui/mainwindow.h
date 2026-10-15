@@ -82,6 +82,7 @@ public:
     // Explicit loopback-only commands, not the general VPN connect action.
     bool managedLoopbackStart(int groupId, QString &error);
     bool managedLoopbackStop(QString &error);
+    bool managedBlocksLegacy() const;
 
     [[nodiscard]] QString shellLogText() const;
 

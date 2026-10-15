@@ -4,6 +4,11 @@
 
 namespace NekoGui_sub {
     struct ManagedLaunchPolicy {
+        // Disabling a mode must remain possible even during failed cleanup.
+        static bool allowLegacyOperation(bool enabling, bool pending, bool activeGroup,
+                                         bool liveProcess, bool managedOwner) {
+            return !enabling || !(pending || activeGroup || liveProcess || managedOwner);
+        }
         static bool allow(bool groupExists, bool archived, const QString &kind,
                           bool systemProxy, bool tun, bool legacyActive, bool exiting,
                           QString &error) {

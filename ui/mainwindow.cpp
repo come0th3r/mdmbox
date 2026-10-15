@@ -532,7 +532,7 @@ bool MainWindow::managedLoopbackStart(int groupId, QString &error) {
     const auto group = NekoGui::profileManager->GetGroup(groupId);
     if (!NekoGui_sub::ManagedLaunchPolicy::allow(group != nullptr, group && group->archive,
             group ? group->subscription_kind : QString(), NekoGui::dataStore->spmode_system_proxy,
-            NekoGui::dataStore->spmode_vpn, NekoGui::dataStore->started_id >= 0 ||
+            NekoGui::dataStore->spmode_vpn || vpn_pid != 0, NekoGui::dataStore->started_id >= 0 ||
             core_ownership.owner() == NekoGui_sub::CoreOwnership::Owner::Legacy,
             NekoGui::dataStore->prepare_exit, error)) return false;
     if (!managed_session_controller || managed_session_controller->busy()) {
@@ -559,6 +559,18 @@ bool MainWindow::managedLoopbackStop(QString &error) {
     error = QStringLiteral("Managed runtime is unavailable in this build");
 #endif
     return false;
+}
+
+bool MainWindow::managedBlocksLegacy() const {
+#ifndef NKR_NO_YAML
+    return !NekoGui_sub::ManagedLaunchPolicy::allowLegacyOperation(true,
+        managed_session_controller && managed_session_controller->busy(),
+        managed_session_controller && managed_session_controller->groupId() >= 0,
+        managed_session_controller && managed_session_controller->processId() != 0,
+        core_ownership.owner() == NekoGui_sub::CoreOwnership::Owner::Managed);
+#else
+    return core_ownership.owner() == NekoGui_sub::CoreOwnership::Owner::Managed;
+#endif
 }
 
 int MainWindow::shellLatencyMs() const {
@@ -973,6 +985,11 @@ void MainWindow::on_menu_exit_triggered() {
     return;
 
 void MainWindow::neko_set_spmode_system_proxy(bool enable, bool save) {
+    if (enable && managedBlocksLegacy()) {
+        MW_show_log(QStringLiteral("System proxy refused: stop the managed loopback session first"));
+        refresh_status();
+        return;
+    }
     if (enable != NekoGui::dataStore->spmode_system_proxy) {
         if (enable) {
             auto socks_port = NekoGui::dataStore->inbound_socks_port;
@@ -996,6 +1013,11 @@ void MainWindow::neko_set_spmode_system_proxy(bool enable, bool save) {
 }
 
 void MainWindow::neko_set_spmode_vpn(bool enable, bool save) {
+    if (enable && managedBlocksLegacy()) {
+        MW_show_log(QStringLiteral("TUN refused: stop the managed loopback session first"));
+        refresh_status();
+        return;
+    }
     if (enable && NekoGui::dataStore->vpn_implementation != 1) {
         NekoGui::dataStore->vpn_implementation = 1;
         NekoGui::dataStore->Save();
@@ -2034,6 +2056,10 @@ void MainWindow::HotkeyEvent(const QString &key) {}
 // VPN Launcher
 
 bool MainWindow::StartVPNProcess() {
+    if (managedBlocksLegacy()) {
+        MW_show_log(QStringLiteral("VPN process refused: stop the managed loopback session first"));
+        return false;
+    }
     //
     if (vpn_pid != 0) {
         return true;
