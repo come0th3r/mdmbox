@@ -3,6 +3,7 @@
 #include "MihomoValidator.hpp"
 #include "ManagedControllerProbe.hpp"
 #include <QProcessEnvironment>
+#include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QTimer>
@@ -119,6 +120,29 @@ namespace NekoGui_sub {
         current = State::Failed;
         error = QStringLiteral("Managed controller readiness failed");
         return false;
+    }
+
+    bool ManagedCoreProcess::stop(QString &error) {
+        return stop([this](qint64 pid) {
+#ifdef Q_OS_WIN
+            QProcess helper;
+            helper.setStandardOutputFile(QProcess::nullDevice());
+            helper.setStandardErrorFile(QProcess::nullDevice());
+            helper.start(QCoreApplication::applicationDirPath() + QStringLiteral("/mdmbox_console_signal.exe"),
+                         {QString::number(pid)});
+            if (!helper.waitForStarted(2000)) return false;
+            if (!helper.waitForFinished(3000)) {
+                helper.kill();
+                helper.waitForFinished(1000);
+                return false;
+            }
+            return helper.exitStatus() == QProcess::NormalExit && helper.exitCode() == 0;
+#else
+            Q_UNUSED(pid)
+            process.terminate();
+            return true;
+#endif
+        }, error);
     }
 
     bool ManagedCoreProcess::stop(const StopSignal &signal, QString &error) {

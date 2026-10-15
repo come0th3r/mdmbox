@@ -20,6 +20,8 @@ target_link_libraries(mdmbox_controller_probe_tests PRIVATE Qt6::Core Qt6::Netwo
 add_test(NAME controller-probe COMMAND mdmbox_controller_probe_tests)
 # Explicit binary argument required; ordinary CTest does not start a runtime.
 if (WIN32)
-    add_executable(mdmbox_test_console_break console-break.cpp)
-    add_dependencies(mdmbox_managed_runtime_smoke mdmbox_test_console_break)
+    add_executable(mdmbox_console_signal ../../sys/managed-console-signal.cpp)
+    add_dependencies(mdmbox_managed_runtime_smoke mdmbox_console_signal)
+    add_test(NAME console-signal-invalid COMMAND mdmbox_console_signal 0)
+    set_tests_properties(console-signal-invalid PROPERTIES WILL_FAIL TRUE)
 endif ()

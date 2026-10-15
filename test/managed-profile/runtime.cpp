@@ -134,23 +134,8 @@ int main(int argc, char **argv) {
         !response.startsWith("HTTP/1.1 200") || headerEnd < 0 ||
         response.mid(headerEnd + 4) != "managed-path-pass") return 16;
     QTextStream(stdout) << "MIHOMO_LOOPBACK_HTTP_DATA_PATH_PASS requests=1\n";
-    const auto signal = [&](qint64 pid) {
-        bool signalSent = false;
-#ifdef Q_OS_WIN
-        QProcess helper;
-        helper.start(QCoreApplication::applicationDirPath() + "/mdmbox_test_console_break.exe",
-                     {QString::number(pid)});
-        if (helper.waitForStarted(2000)) {
-            if (!helper.waitForFinished(3000)) { helper.kill(); helper.waitForFinished(1000); }
-            signalSent = helper.exitStatus() == QProcess::NormalExit && helper.exitCode() == 0;
-        }
-#else
-    Q_UNUSED(pid)
-#endif
-        return signalSent;
-    };
-    if (!child.stop(signal, error) || child.state() != NekoGui_sub::ManagedCoreProcess::State::Stopped ||
-        child.processId() != 0 || !child.stop(signal, error)) return 11;
+    if (!child.stop(error) || child.state() != NekoGui_sub::ManagedCoreProcess::State::Stopped ||
+        child.processId() != 0 || !child.stop(error)) return 11;
     QTcpSocket apiAfter, mixedAfter;
     apiAfter.connectToHost(QHostAddress::LocalHost, apiPort);
     mixedAfter.connectToHost(QHostAddress::LocalHost, mixedPort);
@@ -207,7 +192,7 @@ int main(int argc, char **argv) {
         pause.exec();
     }
     if (child.state() != NekoGui_sub::ManagedCoreProcess::State::Failed || child.waitReady(1000, error) ||
-        child.stop(signal, error) || error.isEmpty() || child.processId() != 0 || !portsClosed()) return 30;
+        child.stop(error) || error.isEmpty() || child.processId() != 0 || !portsClosed()) return 30;
     QTextStream(stdout) << "MIHOMO_UNEXPECTED_EXIT_STATE_PASS\n";
     HANDLE owned = nullptr;
     {

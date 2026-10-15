@@ -205,6 +205,23 @@ Windows ordinary client build PASS, CTest 2/2 PASS, real full runtime PASS exit 
 Header allocation bounds, slow streaming, truncated/chunked responses and actual
 core wrong-token injection remain NOT RUN. No OS trust/proxy changes are made.
 
+### Production console signal adapter
+
+Current `ManagedCoreProcess::stop(error)` uses `mdmbox_console_signal.exe`
+beside the application on Windows; injected stop remains available for tests.
+Helper source is `sys/managed-console-signal.cpp`, built by both ordinary client
+and standalone tests. It validates PID, holds a process handle, attaches only
+in its own process, and requires console membership exactly target+helper before
+CTRL_C. Old test-only console-break source was removed. Non-Windows default
+uses terminate (NOT RUN here). Bounded helper failure still leads to forced
+cleanup, which returns failure rather than graceful success.
+
+Windows ordinary build PASS, CTest 3/3 PASS (includes invalid PID refusal), full
+real-core runtime 2/2 PASS with production default stop, exit 0/forced=0/closed
+ports. Shared-console refusal, helper tampering, full installer delivery and
+multi-config artifact colocation remain NOT RUN. Existing older helper remarks
+above describe earlier revisions, not the current executable.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

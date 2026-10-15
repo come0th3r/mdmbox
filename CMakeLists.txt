@@ -290,6 +290,10 @@ else ()
 endif ()
 
 # Target
+if (WIN32 AND NOT NKR_NO_YAML)
+    add_executable(mdmbox_console_signal sys/managed-console-signal.cpp)
+    add_dependencies(${NKR_APP_TARGET} mdmbox_console_signal)
+endif ()
 
 set_property(TARGET ${NKR_APP_TARGET} PROPERTY AUTOUIC ON)
 set_property(TARGET ${NKR_APP_TARGET} PROPERTY AUTOMOC ON)

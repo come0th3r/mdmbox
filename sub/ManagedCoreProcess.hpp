@@ -22,6 +22,8 @@ namespace NekoGui_sub {
         // Signal adapter must be bounded and target only this child's isolated console.
         // False after forced cleanup: do not report a graceful stop.
         bool stop(const StopSignal &signal, QString &error);
+        // Default platform adapter; Windows helper must be beside the application.
+        bool stop(QString &error);
         State state() const;
         qint64 processId() const;
 

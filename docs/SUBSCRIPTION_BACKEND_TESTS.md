@@ -439,3 +439,19 @@ Retry under deadline; invalid token/header injection and zero timeout rejected
 without requests. One-request timeout max 500 ms/body max 4096 bytes.
 Header allocation bounds, slow-stream/truncated/chunked and actual-core wrong
 token injection remain **NOT RUN**. Production stop adapter/ownership/UI pending.
+
+## Production default console stop — 2026-10-15
+
+Added `ManagedCoreProcess::stop(error)` default platform adapter. Windows launches
+ordinary-built `mdmbox_console_signal.exe` beside application; helper validates
+PID, holds process handle, attaches in its own process, requires exactly target
+and itself in console, then sends CTRL_C. Parent GUI/SSH does not attach/detach.
+Old test-only helper source removed; runtime now exercises production adapter.
+Helper launch/wait bounded; failures retain forced-cleanup failure semantics.
+
+Windows ordinary Release build **PASS**, CTest **3/3 PASS** including invalid
+PID refusal, complete real-core runtime **2/2 PASS** exit 0/forced=0/closed ports,
+including HTTP/API/readiness/crash/destructor regressions. Default non-Windows
+terminate, shared-console refusal, helper tampering, multi-config placement,
+installer delivery and GUI/core ownership integration **NOT RUN**. Console member
+check is a safety gate, not a sandbox or proof against concurrent console changes.
