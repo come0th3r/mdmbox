@@ -1,5 +1,6 @@
 #include "../../sub/ManagedRuntimePolicy.hpp"
 #include "../../sub/MihomoValidator.hpp"
+#include "../../sub/ManagedCoreProcess.hpp"
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QEventLoop>
@@ -9,28 +10,11 @@
 #include <QNetworkProxy>
 #include <QNetworkReply>
 #include <QProcess>
-#include <QProcessEnvironment>
 #include <QRandomGenerator>
 #include <QTcpServer>
 #include <QTcpSocket>
-#include <QTemporaryDir>
 #include <QTextStream>
 #include <QTimer>
-#ifdef Q_OS_WIN
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#endif
-
-struct ChildGuard {
-    QProcess process;
-    ~ChildGuard() {
-        if (process.state() != QProcess::NotRunning) {
-            process.kill();
-            process.waitForFinished(3000);
-        }
-    }
-};
-
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     if (app.arguments().size() != 2) return 1;
@@ -52,29 +36,15 @@ int main(int argc, char **argv) {
     if (!NekoGui_sub::ManagedProfile::ParseMihomo(source, panel, error) ||
         !NekoGui_sub::ManagedRuntimePolicy::projectLoopback(panel, mixedPort, apiPort, token, projected, error) ||
         !NekoGui_sub::MihomoValidator::validate(executable, projected, error)) return 4;
-    QTemporaryDir home;
-    if (!home.isValid()) return 5;
-    ChildGuard child;
-    auto env = QProcessEnvironment::systemEnvironment();
-    for (const auto &key : env.keys()) if (key.startsWith("CLASH_", Qt::CaseInsensitive)) env.remove(key);
-    child.process.setProcessEnvironment(env);
-    child.process.setWorkingDirectory(home.path());
-    child.process.setStandardOutputFile(QProcess::nullDevice());
-    child.process.setStandardErrorFile(QProcess::nullDevice());
-#ifdef Q_OS_WIN
-    child.process.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args) {
-        args->flags &= ~CREATE_NO_WINDOW;
-        args->flags |= CREATE_NEW_CONSOLE;
-        args->startupInfo->dwFlags |= STARTF_USESHOWWINDOW;
-        args->startupInfo->wShowWindow = SW_HIDE;
-    });
-#endif
+    NekoGui_sub::ManagedCoreProcess child;
+    if (child.start(executable + ".missing", panel, mixedPort, apiPort, token, error) ||
+        child.processId() != 0 || child.state() != NekoGui_sub::ManagedCoreProcess::State::Failed) return 18;
     mixedReservation.close();
     apiReservation.close();
-    child.process.start(executable, {"-d", home.path(), "-f", "-"});
-    if (!child.process.waitForStarted(5000)) return 6;
-    if (child.process.write(projected.source) != projected.source.size()) return 7;
-    child.process.closeWriteChannel();
+    if (!child.start(executable, panel, mixedPort, apiPort, token, error)) return 6;
+    const auto ownedPid = child.processId();
+    if (!ownedPid || child.state() != NekoGui_sub::ManagedCoreProcess::State::Running ||
+        child.start(executable, panel, mixedPort, apiPort, token, error) || child.processId() != ownedPid) return 7;
     QNetworkAccessManager manager;
     manager.setProxy(QNetworkProxy::NoProxy);
     auto get = [&](bool authorized, QByteArray &body) {
@@ -99,7 +69,7 @@ int main(int argc, char **argv) {
     deadline.start();
     QByteArray body;
     bool ready = false;
-    while (deadline.elapsed() < 10000 && child.process.state() != QProcess::NotRunning) {
+    while (deadline.elapsed() < 10000 && child.state() == NekoGui_sub::ManagedCoreProcess::State::Running) {
         if (get(true, body) == 200) { ready = true; break; }
         QEventLoop pause;
         QTimer::singleShot(50, &pause, &QEventLoop::quit);
@@ -166,33 +136,44 @@ int main(int argc, char **argv) {
         !response.startsWith("HTTP/1.1 200") || headerEnd < 0 ||
         response.mid(headerEnd + 4) != "managed-path-pass") return 16;
     QTextStream(stdout) << "MIHOMO_LOOPBACK_HTTP_DATA_PATH_PASS requests=1\n";
-    bool signalSent = false;
+    const auto signal = [&](qint64 pid) {
+        bool signalSent = false;
 #ifdef Q_OS_WIN
-    QProcess helper;
-    helper.start(QCoreApplication::applicationDirPath() + "/mdmbox_test_console_break.exe",
-                 {QString::number(child.process.processId())});
-    if (helper.waitForStarted(2000)) {
-        if (!helper.waitForFinished(3000)) { helper.kill(); helper.waitForFinished(1000); }
-        signalSent = helper.exitStatus() == QProcess::NormalExit && helper.exitCode() == 0;
-    }
+        QProcess helper;
+        helper.start(QCoreApplication::applicationDirPath() + "/mdmbox_test_console_break.exe",
+                     {QString::number(pid)});
+        if (helper.waitForStarted(2000)) {
+            if (!helper.waitForFinished(3000)) { helper.kill(); helper.waitForFinished(1000); }
+            signalSent = helper.exitStatus() == QProcess::NormalExit && helper.exitCode() == 0;
+        }
 #else
-    child.process.terminate();
-    signalSent = true;
+    Q_UNUSED(pid)
 #endif
-    const bool terminated = child.process.state() == QProcess::NotRunning || child.process.waitForFinished(5000);
-    if (!terminated) {
-        child.process.kill();
-        if (!child.process.waitForFinished(3000)) return 11;
-    }
+        return signalSent;
+    };
+    if (!child.stop(signal, error) || child.state() != NekoGui_sub::ManagedCoreProcess::State::Stopped ||
+        child.processId() != 0 || !child.stop(signal, error)) return 11;
     QTcpSocket apiAfter, mixedAfter;
     apiAfter.connectToHost(QHostAddress::LocalHost, apiPort);
     mixedAfter.connectToHost(QHostAddress::LocalHost, mixedPort);
     if (apiAfter.waitForConnected(500) || mixedAfter.waitForConnected(500)) return 12;
-    QTextStream(stdout) << "MIHOMO_RUNTIME_API_AUTH_LISTENER_STOP_PASS forced=" << (!terminated ? 1 : 0) << "\n";
-    if (!signalSent || !terminated || child.process.exitStatus() != QProcess::NormalExit || child.process.exitCode() != 0) {
-        QTextStream(stderr) << "CONSOLE_STOP_FAILED signal=" << signalSent << " exit=" << child.process.exitCode() << "\n";
-        return 17;
-    }
+    QTextStream(stdout) << "MIHOMO_RUNTIME_API_AUTH_LISTENER_STOP_PASS forced=0\n";
     QTextStream(stdout) << "MIHOMO_CONSOLE_GRACEFUL_EXIT_PASS code=0\n";
+    if (!child.start(executable, panel, mixedPort, apiPort, token, error)) return 19;
+    deadline.restart();
+    ready = false;
+    while (deadline.elapsed() < 10000 && child.state() == NekoGui_sub::ManagedCoreProcess::State::Running) {
+        if (get(true, body) == 200) { ready = true; break; }
+        QEventLoop pause;
+        QTimer::singleShot(50, &pause, &QEventLoop::quit);
+        pause.exec();
+    }
+    if (!ready || child.stop({}, error) || error.isEmpty() || child.processId() != 0 ||
+        child.state() != NekoGui_sub::ManagedCoreProcess::State::Failed) return 20;
+    QTcpSocket forcedApiAfter, forcedMixedAfter;
+    forcedApiAfter.connectToHost(QHostAddress::LocalHost, apiPort);
+    forcedMixedAfter.connectToHost(QHostAddress::LocalHost, mixedPort);
+    if (forcedApiAfter.waitForConnected(500) || forcedMixedAfter.waitForConnected(500)) return 21;
+    QTextStream(stdout) << "MIHOMO_PROCESS_OWNERSHIP_FAILURE_CLEANUP_PASS\n";
     return 0;
 }

@@ -372,3 +372,21 @@ failed strict normal exit-0 gate; final CTRL_C runs **2/2 PASS**, exit 0 and
 Base CTest **1/1 PASS** during this change. Failure path retains bounded kill.
 No claim of application-wide graceful lifecycle: production manager, process
 tree/crash cleanup and OS snapshot checks remain **NOT RUN**.
+
+## Reusable managed process ownership — 2026-10-15
+
+Added `ManagedCoreProcess` to ordinary YAML-enabled production build, replacing
+smoke's direct QProcess start/stop logic. It reprojects and validates before
+execution, owns temporary home/child, rejects duplicate start, distinguishes
+running process from readiness, and reports forced cleanup as Failed, not a
+graceful success. Signal delivery is injected; console helper remains test-only.
+
+Windows ordinary Release build **PASS**, base CTest **1/1 PASS**; smoke **3/3
+PASS** (two initial runs, one final after cleanup guard). Missing executable
+refused without PID, duplicate start retains PID, API/auth/HTTP path PASS,
+graceful stop exit 0 and closed ports, repeated stop succeeds, restart succeeds,
+absent signal requires forced cleanup and returns failure/Failed with PID 0
+and closed listeners. An unconfirmed kill disables temporary-home auto-remove;
+this rare branch is **NOT RUN**, as are destructor/crash/tree fault injection.
+No GUI command wiring, production stop adapter, authenticated readiness service,
+single-core ownership arbitration or OS snapshot verification is claimed.

@@ -249,6 +249,7 @@ if (NOT NKR_NO_YAML)
     list(APPEND PROJECT_SOURCES
             sub/ManagedProfile.cpp
             sub/ManagedRuntimePolicy.cpp
+            sub/ManagedCoreProcess.cpp
             sub/ManagedProfileStore.cpp
             sub/MihomoValidator.cpp
             sub/SubscriptionContract.cpp

@@ -149,6 +149,24 @@ the older terminate path. Kill remains failure cleanup, not a passing shutdown.
 This is still test-only: production lifecycle, crash/process-tree handling,
 OS snapshot verification and installer packaging are pending.
 
+### Reusable process owner
+
+Smoke now exercises `sub/ManagedCoreProcess.*`, also compiled into the ordinary
+YAML-enabled client. This synchronous single-worker-thread component owns its
+child and temporary home, applies reviewed projection/config-check, rejects
+duplicate starts, and exposes Stopped/Starting/Running/Stopping/Failed states.
+Running is process liveness only, not API readiness or connected status.
+Stop uses an injected bounded signal adapter; the Windows console helper stays
+test-only and is not installed with the client. Application wiring is pending.
+
+Windows ordinary client build and base CTest 1/1 PASS. Three smoke invocations
+PASS (two initial plus final cleanup adjustment): missing executable rejected,
+duplicate start preserves PID, graceful exit/closed ports, idempotent stop,
+restart and absent-signal forced cleanup reports failure with no live owned PID
+or listeners. Unconfirmed kill disables temporary-home auto-removal, preserving
+files rather than deleting an active core's directory. That rare failure path,
+destructor/process-tree/crash fault injection and non-Windows smoke are NOT RUN.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under
