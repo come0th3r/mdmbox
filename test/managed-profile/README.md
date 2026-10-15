@@ -394,6 +394,25 @@ check and subsequent work are not a single cross-thread transaction. External
 proxy Crashed messages remain unversioned. Automatic recovery and independently
 confirmed daemon/descendant/OS cleanup remain pending.
 
+### Real CoreProcess event producer fixture
+
+The production-graph parser runner includes `CoreProcessFixture.hpp`. Genuine
+CoreProcess starts a bounded synthetic self-child that prints the readiness
+marker and exits with code42. An event collector checks CoreStarted profile77
+and daemon generation, then CoreCrashed with the same daemon and captured
+ownership generation. A manual Restart occurs before the production delayed
+retry; the fixture checks old-generation refusal, duplicate Start PID stability,
+and the new child's unchanged PID after 1300ms. Intentional shutdown emits no
+additional crash notification. Fixture restores callbacks and datastore flags.
+
+Windows runner build PASS; two runs print
+`CORE_PROCESS_REAL_EVENTS_RESTART_STALE_TIMER_PASS`, parser39/39 and
+ExternalProcess4 PASS. CTest6/6 and full real-mihomo smoke PASS exit0/forced0.
+Only tests changed; ordinary production build was not repeated (previous
+production revision build PASS). This exercises actual event production with a
+synthetic child, not nekobox RPC or the real GUI consumer. Failed restart,
+unconfirmed kill, descendant/OS cleanup and recovery remain NOT RUN.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

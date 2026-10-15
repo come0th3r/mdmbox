@@ -2,6 +2,7 @@
 #include "db/ConfigBuilder.hpp"
 #include "fmt/CustomBean.hpp"
 #include "ExternalProcessFixture.hpp"
+#include "CoreProcessFixture.hpp"
 #include <QTimer>
 #include <QApplication>
 #include <QDir>
@@ -21,6 +22,12 @@ public:
 };
 
 int main(int argc, char **argv) {
+    if (argc == 2 && QString::fromLocal8Bit(argv[1]) == QStringLiteral("--daemon-event-child")) {
+        QCoreApplication child(argc, argv);
+        QTextStream(stdout) << "grpc server listening\n" << Qt::flush;
+        QTimer::singleShot(100, &child, [] { QCoreApplication::exit(42); });
+        return child.exec();
+    }
     if (argc == 2 && QString::fromLocal8Bit(argv[1]) == QStringLiteral("--external-process-child")) {
         QCoreApplication child(argc, argv);
         QTimer::singleShot(10000, &child, &QCoreApplication::quit);
@@ -31,6 +38,7 @@ int main(int argc, char **argv) {
     MW_show_log = [](QString) {};
     MW_dialog_message = [](QString, QString) {};
     if (!runExternalProcessFixture()) return 80;
+    if (!runCoreProcessFixture()) return 81;
     QTemporaryDir directory;
     WorkingDirectoryGuard workingDirectory; // Restore cwd before temporary directory cleanup.
     if (!directory.isValid() || !QDir::setCurrent(directory.path())) return 2;
