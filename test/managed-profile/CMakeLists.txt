@@ -26,6 +26,10 @@ add_executable(mdmbox_process_cleanup_tests process-cleanup.cpp ../../sub/CoreOw
 target_link_libraries(mdmbox_process_cleanup_tests PRIVATE Qt6::Core)
 add_test(NAME process-cleanup COMMAND mdmbox_process_cleanup_tests)
 set_tests_properties(process-cleanup PROPERTIES TIMEOUT 25)
+add_executable(mdmbox_cleanup_completion_tests cleanup-completion.cpp ../../sub/CoreOwnership.cpp)
+target_link_libraries(mdmbox_cleanup_completion_tests PRIVATE Qt6::Core)
+add_test(NAME cleanup-completion COMMAND mdmbox_cleanup_completion_tests)
+set_tests_properties(cleanup-completion PROPERTIES TIMEOUT 20)
 # Explicit binary argument required; ordinary CTest does not start a runtime.
 if (WIN32)
     add_executable(mdmbox_console_signal ../../sys/managed-console-signal.cpp)

@@ -7,6 +7,7 @@
 #include "rpc/gRPC.h"
 #include "sub/LegacyCoreLifecycle.hpp"
 #include "sys/TrackedProcessCleanup.hpp"
+#include "sys/ProcessCleanupCompletion.hpp"
 #include "ui/widget/MessageBoxTimer.h"
 
 #include <QTimer>
@@ -444,19 +445,15 @@ void MainWindow::neko_stop(bool crash, bool sem) {
     }
 
     auto neko_stop_stage2 = [=] {
-        struct ExternalStopResult {
-            QSemaphore completed;
-            bool stopped = false;
-        };
-        auto externalStop = std::make_shared<ExternalStopResult>();
+        auto externalStop = std::make_shared<NekoGui_sys::ProcessCleanupCompletion>();
         runOnUiThread(
             [=] {
-                externalStop->stopped = NekoGui_sys::cleanupTrackedProcesses(
+                const bool stopped = NekoGui_sys::cleanupTrackedProcesses(
                     NekoGui_sys::running_ext, [](NekoGui_sys::ExternalProcess &process) { process.Kill(); });
-                externalStop->completed.release();
+                externalStop->complete(stopped);
             },
             DS_cores);
-        const bool externalProcessesStopped = externalStop->completed.tryAcquire(1, 5000) && externalStop->stopped;
+        const bool externalProcessesStopped = externalStop->wait(5000);
 
 #ifndef NKR_NO_GRPC
         NekoGui_traffic::trafficLooper->loop_enabled = false;

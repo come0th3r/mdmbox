@@ -322,6 +322,24 @@ Prior flags are injected; actual timeout/error callbacks, managed=true crash
 notifications, GUI queue faults, descendants and automatic recovery are NOT
 RUN. The fixture does not authorize clearing a previously uncertain owner.
 
+### Queued cleanup completion and late replies
+
+Production stop now uses `ProcessCleanupCompletion` for its queued cleanup
+result (one producer and one waiting worker). Timeout is terminal, negative
+timeouts fail closed, duplicate completion cannot overwrite the first result,
+and the callback retains shared lifetime after the worker stops waiting.
+The production deadline remains 5 seconds.
+
+`cleanup-completion` tests real QThread queued success/failure, a gated late
+callback after an actual timeout, caller reference release, missing callback,
+duplicate reply and invalid timeout. Late success cannot unblock Uncertain.
+Windows production build PASS, CTest **6/6 PASS**, direct runner
+`CLEANUP_QUEUE_SUCCESS_FAILURE_TIMEOUT_LATE_REPLY_PASS`, parser 39/39 plus
+production ExternalProcess cases=4 PASS, real-mihomo smoke PASS exit 0/forced=0.
+These fixtures test the shared completion and isolated Qt queue, not the full
+GUI runOnUiThread/RPC sequence. Automatic recovery, daemon-generation proof
+and descendant/OS-resource cleanup remain pending.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under
