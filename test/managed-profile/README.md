@@ -597,6 +597,30 @@ resync after a missed event. Normal daemon startup, visible design UI, pending
 destruction, request-correlated completions, no-YAML and OS snapshots remain
 NOT RUN. GPU/font/offscreen/libpng warnings remain.
 
+### Snapshot resync and completion correlation
+
+Bridge managedSnapshot returns the current read-only application snapshot.
+After subscribing to runtime events, the production JS helper requests this
+snapshot and exposes it as window.mdmboxManaged.runtime, dispatching
+mdmbox-managed-snapshot. refresh() repeats the request. A local event revision
+discards its callback if a runtime event arrived since the request, avoiding
+overwriting that newer event. This is cached controller state, not API health.
+
+Accepted bridge Start/Stop commands retain requestId and command in MainWindow
+until operationFinished; they are cleared before emitting completion. Refused
+busy commands cannot replace them. runtimeFailed stays a global event without
+claiming to complete an earlier command. IDs are caller correlation labels,
+not deduplication keys or durable operation history.
+
+Production/fixture builds PASS. Production E2E checks restored Ready after JS
+context replacement without Start, and matching Start/Stop completion fields
+despite the busy Stop refusal:
+MANAGED_PRODUCTION_RELOAD_READY_SNAPSHOT_RESYNC_PASS. Existing hook/crash tests,
+CTest6/6, parser39/39/process fixtures and full real-mihomo smoke PASS
+exit0/forced0. Snapshot callback/event race branch has not been forced
+deterministically. Concurrent refresh response ordering, pending reload,
+duplicate/reused request IDs, no-YAML and normal startup remain NOT RUN.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

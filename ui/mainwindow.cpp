@@ -78,8 +78,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     managed_session_controller = new NekoGui_sub::ManagedSessionController(this);
     connect(managed_session_controller, &NekoGui_sub::ManagedSessionController::operationFinished,
             this, [this](bool success, const QString &) {
+        const auto requestId = managed_request_id;
+        const auto command = managed_request_command;
+        managed_request_id.clear();
+        managed_request_command.clear();
         emit managedRuntimeEvent({{QStringLiteral("schemaVersion"), 1},
             {QStringLiteral("type"), QStringLiteral("operationFinished")},
+            {QStringLiteral("requestId"), requestId},
+            {QStringLiteral("command"), command},
             {QStringLiteral("success"), success},
             {QStringLiteral("runtime"), shellManagedRuntimeState()}});
     });
@@ -578,16 +584,24 @@ bool MainWindow::managedLoopbackStop(QString &error) {
     return false;
 }
 
-QJsonObject MainWindow::managedLoopbackStartResult(int groupId) {
+QJsonObject MainWindow::managedLoopbackStartResult(int groupId, const QString &requestId) {
     QString error;
     const bool accepted = managedLoopbackStart(groupId, error);
+    if (accepted) {
+        managed_request_id = requestId;
+        managed_request_command = QStringLiteral("managedStart");
+    }
     return NekoGui_sub::ManagedCommandContract::result(QStringLiteral("managedStart"),
         accepted, error, shellManagedRuntimeState());
 }
 
-QJsonObject MainWindow::managedLoopbackStopResult() {
+QJsonObject MainWindow::managedLoopbackStopResult(const QString &requestId) {
     QString error;
     const bool accepted = managedLoopbackStop(error);
+    if (accepted) {
+        managed_request_id = requestId;
+        managed_request_command = QStringLiteral("managedStop");
+    }
     return NekoGui_sub::ManagedCommandContract::result(QStringLiteral("managedStop"),
         accepted, error, shellManagedRuntimeState());
 }

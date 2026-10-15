@@ -594,14 +594,28 @@ void MdmBoxShellWindow::hookPage() {
 
              if (!window.__mdmboxManagedApiBound) {
                window.__mdmboxManagedApiBound = true;
-               window.mdmboxManaged = {
+                window.mdmboxManaged = {
+                  runtime: null,
                  start: function (groupId, requestId) {
                    window.mdmboxBridge.managedStart(groupId, String(requestId || ""));
                  },
-                 stop: function (requestId) {
-                   window.mdmboxBridge.managedStop(String(requestId || ""));
-                 }
-               };
+                  stop: function (requestId) {
+                    window.mdmboxBridge.managedStop(String(requestId || ""));
+                  },
+                  refresh: function () {
+                    const revision = managedRevision;
+                    window.mdmboxBridge.managedSnapshot(function (runtime) {
+                      // A runtime event delivered since the request is newer.
+                      if (revision !== managedRevision) return;
+                      applyManagedRuntime(runtime);
+                    });
+                  }
+                };
+                let managedRevision = 0;
+                function applyManagedRuntime(runtime) {
+                  window.mdmboxManaged.runtime = runtime;
+                  window.dispatchEvent(new CustomEvent("mdmbox-managed-snapshot", { detail: runtime }));
+                }
                if (window.mdmboxBridge.managedCommandResult &&
                    window.mdmboxBridge.managedCommandResult.connect) {
                  window.mdmboxBridge.managedCommandResult.connect(function (requestId, result) {
@@ -610,9 +624,12 @@ void MdmBoxShellWindow::hookPage() {
                    }));
                  });
                }
-               window.mdmboxBridge.managedRuntimeEvent.connect(function (event) {
-                 window.dispatchEvent(new CustomEvent("mdmbox-managed-runtime", { detail: event }));
-               });
+                window.mdmboxBridge.managedRuntimeEvent.connect(function (event) {
+                  ++managedRevision;
+                  applyManagedRuntime(event.runtime);
+                  window.dispatchEvent(new CustomEvent("mdmbox-managed-runtime", { detail: event }));
+                });
+                window.mdmboxManaged.refresh();
              }
 
              function detectNavTarget(text) {
@@ -1610,8 +1627,8 @@ void MdmBoxShellWindow::triggerConnectToggle() {
     refreshPageState();
 }
 
-QJsonObject MdmBoxShellWindow::managedLoopbackStartResult(int groupId) {
-    if (auto *mw = GetMainWindow()) return mw->managedLoopbackStartResult(groupId);
+QJsonObject MdmBoxShellWindow::managedLoopbackStartResult(int groupId, const QString &requestId) {
+    if (auto *mw = GetMainWindow()) return mw->managedLoopbackStartResult(groupId, requestId);
     return {{QStringLiteral("schemaVersion"), 1},
             {QStringLiteral("command"), QStringLiteral("managedStart")},
             {QStringLiteral("accepted"), false},
@@ -1620,8 +1637,13 @@ QJsonObject MdmBoxShellWindow::managedLoopbackStartResult(int groupId) {
             {QStringLiteral("runtime"), QJsonObject{}}};
 }
 
-QJsonObject MdmBoxShellWindow::managedLoopbackStopResult() {
-    if (auto *mw = GetMainWindow()) return mw->managedLoopbackStopResult();
+QJsonObject MdmBoxShellWindow::managedRuntimeSnapshot() const {
+    if (auto *mw = GetMainWindow()) return mw->shellManagedRuntimeState();
+    return {};
+}
+
+QJsonObject MdmBoxShellWindow::managedLoopbackStopResult(const QString &requestId) {
+    if (auto *mw = GetMainWindow()) return mw->managedLoopbackStopResult(requestId);
     return {{QStringLiteral("schemaVersion"), 1},
             {QStringLiteral("command"), QStringLiteral("managedStop")},
             {QStringLiteral("accepted"), false},

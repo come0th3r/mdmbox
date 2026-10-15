@@ -82,8 +82,8 @@ public:
     // Explicit loopback-only commands, not the general VPN connect action.
     bool managedLoopbackStart(int groupId, QString &error);
     bool managedLoopbackStop(QString &error);
-    QJsonObject managedLoopbackStartResult(int groupId);
-    QJsonObject managedLoopbackStopResult();
+    QJsonObject managedLoopbackStartResult(int groupId, const QString &requestId = {});
+    QJsonObject managedLoopbackStopResult(const QString &requestId = {});
     bool managedBlocksLegacy() const;
 
     [[nodiscard]] QString shellLogText() const;
@@ -172,6 +172,8 @@ private:
     NekoGui_sub::ManagedSessionController *managed_session_controller = nullptr;
 #endif
     qint64 vpn_pid = 0;
+    QString managed_request_id;
+    QString managed_request_command;
     //
     bool qvLogAutoScoll = true;
     QTextDocument *qvLogDocument = new QTextDocument(this);

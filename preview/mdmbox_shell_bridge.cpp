@@ -21,15 +21,19 @@ void MdmBoxShellBridge::managedStart(const QJsonValue &groupId, const QString &r
             QStringLiteral("managedStart"), false, QStringLiteral("Invalid group ID"), {}));
         return;
     }
-    emit managedCommandResult(requestId, window ? window->managedLoopbackStartResult(id) :
+    emit managedCommandResult(requestId, window ? window->managedLoopbackStartResult(id, requestId) :
         NekoGui_sub::ManagedCommandContract::result(QStringLiteral("managedStart"), false,
             QStringLiteral("Shell is unavailable"), {}));
 }
 
 void MdmBoxShellBridge::managedStop(const QString &requestId) {
-    emit managedCommandResult(requestId, window ? window->managedLoopbackStopResult() :
+    emit managedCommandResult(requestId, window ? window->managedLoopbackStopResult(requestId) :
         NekoGui_sub::ManagedCommandContract::result(QStringLiteral("managedStop"), false,
             QStringLiteral("Shell is unavailable"), {}));
+}
+
+QJsonObject MdmBoxShellBridge::managedSnapshot() {
+    return window ? window->managedRuntimeSnapshot() : QJsonObject{};
 }
 
 void MdmBoxShellBridge::toggleTun() {

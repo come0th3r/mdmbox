@@ -22,8 +22,9 @@ public:
     void hookPage();
     void refreshPageState();
     void triggerConnectToggle();
-    QJsonObject managedLoopbackStartResult(int groupId);
-    QJsonObject managedLoopbackStopResult();
+    QJsonObject managedLoopbackStartResult(int groupId, const QString &requestId);
+    QJsonObject managedLoopbackStopResult(const QString &requestId);
+    QJsonObject managedRuntimeSnapshot() const;
     void triggerTunToggle();
     void triggerSystemProxyToggle();
     void triggerClipboardImport();

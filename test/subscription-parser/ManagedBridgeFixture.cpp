@@ -57,6 +57,7 @@ int runManagedBridgeFixture(QApplication &app) {
     int phase = 0;
     int startReplies = 0, busyReplies = 0, stopReplies = 0;
     int readyEvents = 0, stoppedEvents = 0, crashEvents = 0, loadedPages = 0;
+    int restoredReady = 0;
     bool failed = false;
     auto await = [&](const std::function<bool()> &condition) {
         QElapsedTimer timer;
@@ -77,11 +78,20 @@ int runManagedBridgeFixture(QApplication &app) {
         else if (id == "js-stopped") { phase = 2; ++stoppedEvents; }
         else if (id == "js-crashed") { phase = 3; ++crashEvents; }
         else if (id == "js-loaded") ++loadedPages;
+        else if (id == "js-restored-ready") ++restoredReady;
         else if (id == "js-failed") failed = true;
     });
     QObject::connect(&page, &QWebEnginePage::renderProcessTerminated, &app,
         [&](QWebEnginePage::RenderProcessTerminationStatus, int) { failed = true; });
     const QString script = QStringLiteral(R"HTML(<!doctype html><script>
+        window.addEventListener('mdmbox-managed-snapshot',function(event){
+          const r=event.detail;
+          if(r.schemaVersion!==1||r.scope!=='loopback-only'||r.vpnConnected){
+            window.mdmboxManaged.start(null,'js-failed');return;
+          }
+          if(r.state==='ready'&&r.controllerReady)
+            window.mdmboxManaged.start(null,'js-restored-ready');
+        });
         window.addEventListener('mdmbox-managed-command-result',function(event){
             const id=event.detail.requestId,r=event.detail.result;
             if(id==='start' && (!r.accepted || !r.queued || !r.runtime.busy || r.runtime.vpnConnected))
@@ -90,6 +100,11 @@ int runManagedBridgeFixture(QApplication &app) {
         window.addEventListener('mdmbox-managed-runtime',function(event){
             const e=event.detail,m=window.mdmboxManaged;
             if(e.schemaVersion!==1||e.runtime.vpnConnected){m.start(null,'js-failed');return;}
+            if(e.type==='operationFinished'&&
+              ((e.runtime.state==='ready'&&(e.requestId!=='start'||e.command!=='managedStart'))||
+               (e.runtime.state==='stopped'&&(e.requestId!=='stop'||e.command!=='managedStop')))){
+                m.start(null,'js-failed');return;
+            }
             if(e.type==='runtimeFailed'&&!e.success&&e.runtime.state==='failed'&&!e.runtime.controllerReady)
               m.start(null,'js-crashed');
             else if(e.type!=='operationFinished'||!e.success)m.start(null,'js-failed');
@@ -116,7 +131,7 @@ int runManagedBridgeFixture(QApplication &app) {
         !window.managedBlocksLegacy()) return 94;
     // Recreate JS context while the real core remains active. No implicit Start.
     page.setHtml(script, QUrl("qrc:///"));
-    if (!await([&] { return loadedPages == 2; }) || readyEvents != 1 ||
+    if (!await([&] { return loadedPages == 2 && restoredReady == 2; }) || readyEvents != 1 ||
         !window.shellManagedRuntimeState().value("controllerReady").toBool()) return 100;
 #ifdef Q_OS_WIN
     auto *controller = window.findChild<NekoGui_sub::ManagedSessionController *>();
@@ -145,6 +160,7 @@ int runManagedBridgeFixture(QApplication &app) {
     QTextStream(stdout) << "MANAGED_PRODUCTION_BRIDGE_JS_START_BUSY_READY_STOP_PASS\n";
     if (stoppedEvents != 1) return 105;
     QTextStream(stdout) << "MANAGED_PRODUCTION_HOOK_CUSTOM_EVENT_RELOAD_PASS\n";
+    QTextStream(stdout) << "MANAGED_PRODUCTION_RELOAD_READY_SNAPSHOT_RESYNC_PASS\n";
 #ifdef Q_OS_WIN
     QTextStream(stdout) << "MANAGED_PRODUCTION_CRASH_JS_FAILED_RESTART_PASS\n";
 #endif
