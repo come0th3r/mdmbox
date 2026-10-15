@@ -21,6 +21,7 @@
 #include "GroupSort.hpp"
 
 #include "db/ProxyEntity.hpp"
+#include "sub/CoreOwnership.hpp"
 #include "main/GuiUtils.hpp"
 
 #endif
@@ -178,6 +179,7 @@ private:
     QMutex mu_starting;
     QMutex mu_stopping;
     QMutex mu_exit;
+    NekoGui_sub::CoreOwnership &core_ownership = NekoGui_sub::CoreOwnership::shared();
     QSemaphore sem_stopped;
     int exit_reason = 0;
 

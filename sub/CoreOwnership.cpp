@@ -1,6 +1,11 @@
 #include "CoreOwnership.hpp"
 
 namespace NekoGui_sub {
+    CoreOwnership &CoreOwnership::shared() {
+        static CoreOwnership instance;
+        return instance;
+    }
+
     bool CoreOwnership::acquire(Owner owner, QString &error) {
         error.clear();
         if (owner == Owner::None) { error = QStringLiteral("Cannot acquire an empty core owner"); return false; }

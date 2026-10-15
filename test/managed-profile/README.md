@@ -239,6 +239,19 @@ winner. Windows CTest 4/4 PASS. This is not a singleton or production lifecycle
 integration: callers must share the same instance. RPC failure handling and
 actual core switching remain NOT RUN.
 
+### Shared production arbitration
+
+Both legacy profile start/stop and ManagedCoreProcess now use
+`CoreOwnership::shared()`. Managed cleanup releases only after confirmed child
+exit. Legacy releases only on successful RPC Stop; failed start/stop or crash
+conservatively blocks subsequent acquisition until application restart.
+Runtime fixture verifies synthetic Legacy ownership refuses managed start,
+and running managed refuses Legacy acquisition and a second managed process.
+Windows ordinary build PASS, CTest 4/4 PASS, full runtime PASS exit 0 including
+`MIHOMO_SHARED_CORE_ARBITRATION_PASS`. Actual GUI RPC faults, core-only restart
+recovery and external-child exit confirmation remain NOT RUN. This arbitration
+is process-local, not an interprocess lock or OS resource ownership guarantee.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

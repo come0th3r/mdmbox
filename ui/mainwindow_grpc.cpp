@@ -394,10 +394,23 @@ void MainWindow::neko_start(int _id) {
             runOnUiThread([=] { neko_stop(false, true); });
             sem_stopped.acquire();
         }
+        QString ownershipError;
+        if (!core_ownership.acquire(NekoGui_sub::CoreOwnership::Owner::Legacy, ownershipError)) {
+            MW_show_log(QStringLiteral("Legacy core ownership refused: ") + ownershipError);
+            mu_starting.unlock();
+            runOnUiThread([=] {
+                restartMsgboxTimer->cancel();
+                restartMsgboxTimer->deleteLater();
+                restartMsgbox->deleteLater();
+            });
+            return;
+        }
         // do start
         MW_show_log(">>>>>>>> " + tr("Starting profile %1").arg(ent->bean->DisplayTypeAndName()));
         if (!neko_start_stage2()) {
             MW_show_log("<<<<<<<< " + tr("Failed to start profile %1").arg(ent->bean->DisplayTypeAndName()));
+            // Start failures are deliberately conservative: RPC failure may
+            // leave the old core alive, so ownership stays held until restart.
         }
         mu_starting.unlock();
         // cancel timeout
@@ -452,6 +465,11 @@ void MainWindow::neko_stop(bool crash, bool sem) {
                 runOnUiThread([=] { MessageBoxWarning("Stop return error", error); });
                 return false;
             } else if (!rpcOK) {
+                return false;
+            }
+            QString ownershipError;
+            if (!core_ownership.release(NekoGui_sub::CoreOwnership::Owner::Legacy, ownershipError)) {
+                MW_show_log(QStringLiteral("Legacy core ownership release refused: ") + ownershipError);
                 return false;
             }
         }

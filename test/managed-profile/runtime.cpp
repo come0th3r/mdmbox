@@ -1,6 +1,7 @@
 #include "../../sub/ManagedRuntimePolicy.hpp"
 #include "../../sub/MihomoValidator.hpp"
 #include "../../sub/ManagedCoreProcess.hpp"
+#include "../../sub/CoreOwnership.hpp"
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QEventLoop>
@@ -41,11 +42,22 @@ int main(int argc, char **argv) {
         !NekoGui_sub::ManagedRuntimePolicy::projectLoopback(panel, mixedPort, apiPort, token, projected, error) ||
         !NekoGui_sub::MihomoValidator::validate(executable, projected, error)) return 4;
     NekoGui_sub::ManagedCoreProcess child;
+    using Ownership = NekoGui_sub::CoreOwnership;
+    auto &ownership = Ownership::shared();
+    if (!ownership.acquire(Ownership::Owner::Legacy, error)) return 34;
+    if (child.start(executable, panel, mixedPort, apiPort, token, error) || child.processId() != 0 ||
+        ownership.owner() != Ownership::Owner::Legacy || error.isEmpty()) return 35;
+    if (!ownership.release(Ownership::Owner::Legacy, error)) return 36;
     if (child.start(executable + ".missing", panel, mixedPort, apiPort, token, error) ||
         child.processId() != 0 || child.state() != NekoGui_sub::ManagedCoreProcess::State::Failed) return 18;
     mixedReservation.close();
     apiReservation.close();
     if (!child.start(executable, panel, mixedPort, apiPort, token, error)) return 6;
+    NekoGui_sub::ManagedCoreProcess competing;
+    if (ownership.acquire(Ownership::Owner::Legacy, error) ||
+        competing.start(executable, panel, mixedPort, apiPort, token, error) || competing.processId() != 0 ||
+        ownership.owner() != Ownership::Owner::Managed) return 37;
+    QTextStream(stdout) << "MIHOMO_SHARED_CORE_ARBITRATION_PASS\n";
     const auto ownedPid = child.processId();
     if (!ownedPid || child.state() != NekoGui_sub::ManagedCoreProcess::State::Running ||
         child.start(executable, panel, mixedPort, apiPort, token, error) || child.processId() != ownedPid) return 7;

@@ -2,6 +2,7 @@
 #include "ManagedRuntimePolicy.hpp"
 #include "MihomoValidator.hpp"
 #include "ManagedControllerProbe.hpp"
+#include "CoreOwnership.hpp"
 #include <QProcessEnvironment>
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -27,6 +28,11 @@ namespace NekoGui_sub {
         home.reset(); // Never remove home while the owned child is known to be running.
         controllerToken.clear();
         controllerPort = 0;
+        if (ownsRuntime) {
+            QString ignored;
+            CoreOwnership::shared().release(CoreOwnership::Owner::Managed, ignored);
+            ownsRuntime = false;
+        }
         return true;
     }
 
@@ -44,16 +50,24 @@ namespace NekoGui_sub {
             error = QStringLiteral("Managed core already owns an active process");
             return false;
         }
+        // Reap any previous failed generation before acquiring a new one.
+        if (!forceCleanup()) {
+            error = QStringLiteral("Previous managed core cleanup is not confirmed");
+            return false;
+        }
+        if (!CoreOwnership::shared().acquire(CoreOwnership::Owner::Managed, error)) return false;
+        ownsRuntime = true;
         current = State::Starting;
         ManagedProfile projected;
         if (!ManagedRuntimePolicy::projectLoopback(panel, mixedPort, apiPort, apiToken, projected, error) ||
             !MihomoValidator::validate(executable, projected, error)) {
+            forceCleanup();
             current = State::Failed;
             return false;
         }
         home = std::make_unique<QTemporaryDir>();
         if (!home->isValid()) {
-            home.reset();
+            forceCleanup();
             current = State::Failed;
             error = QStringLiteral("Managed runtime directory unavailable");
             return false;

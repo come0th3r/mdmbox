@@ -28,6 +28,7 @@ namespace NekoGui_sub {
         qint64 processId() const;
 
     private:
+        bool ownsRuntime = false;
         QProcess process;
         std::unique_ptr<QTemporaryDir> home;
         State current = State::Stopped;
