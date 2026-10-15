@@ -112,4 +112,28 @@ namespace NekoGui_sub {
         if (runtime.processId() == 0) working.reset();
         return graceful;
     }
+
+    bool ManagedSession::refreshAndReconnect(ManagedProfileStore &store, int groupId, const QUrl &url,
+                                             const QString &appVersion, const QString &identityDirectory,
+                                             const SubscriptionService::Fetcher &fetch, const QString &executable,
+                                             int mixedPort, int apiPort, int readinessTimeoutMs, QString &error) {
+        error.clear();
+        lastReconnect = ReconnectOutcome::Rejected;
+        if (groupId < 0 || activeGroup != groupId || runtime.state() != ManagedCoreProcess::State::Ready ||
+            runtime.processId() == 0 || readinessTimeoutMs < 1 || readinessTimeoutMs > 30000) {
+            error = QStringLiteral("Refresh/apply requires the same ready group and a valid readiness timeout");
+            return false;
+        }
+        // Do not contact the panel/advertise a version before verifying its artifact.
+        if (!MihomoValidator::verifyExecutable(executable, error)) return false;
+        const auto validate = [&](const ManagedProfile &profile, QString &reason) {
+            ManagedProfile projected;
+            // Reject execution-policy failures BEFORE replacing the saved snapshot.
+            return ManagedRuntimePolicy::projectLoopback(profile, mixedPort, apiPort, QByteArray(64, 'a'), projected, reason) &&
+                   MihomoValidator::validate(executable, projected, reason);
+        };
+        if (!SubscriptionService::refresh(groupId, url, appVersion, identityDirectory, store, fetch, validate, error))
+            return false;
+        return reconnect(store, groupId, executable, mixedPort, apiPort, readinessTimeoutMs, error);
+    }
 }

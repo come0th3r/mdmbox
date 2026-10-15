@@ -17,6 +17,7 @@ target_link_libraries(mdmbox_managed_runtime_smoke PRIVATE Qt6::Core Qt6::Networ
 target_sources(mdmbox_managed_runtime_smoke PRIVATE ../../sub/ManagedControllerProbe.cpp)
 target_sources(mdmbox_managed_runtime_smoke PRIVATE ../../sub/CoreOwnership.cpp)
 target_sources(mdmbox_managed_runtime_smoke PRIVATE ../../sub/ManagedSession.cpp ../../sub/ManagedProfileStore.cpp ../../sub/SubscriptionContract.cpp)
+target_sources(mdmbox_managed_runtime_smoke PRIVATE ../../sub/SubscriptionService.cpp ../../sub/InstallationIdentity.cpp)
 set_target_properties(mdmbox_managed_runtime_smoke PROPERTIES AUTOMOC ON)
 target_sources(mdmbox_managed_runtime_smoke PRIVATE ../../sub/ManagedSessionController.cpp ../../sub/ManagedSessionController.hpp)
 add_executable(mdmbox_controller_probe_tests controller.cpp ../../sub/ManagedControllerProbe.cpp)

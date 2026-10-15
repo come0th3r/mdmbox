@@ -817,6 +817,32 @@ full real-mihomo runtime PASS. Bridge Restored/RestoreFailed/StopFailed event
 delivery, no-YAML build, ID replay, actual endpoint transition and automatic
 refresh/apply remain NOT RUN. No visible Figma control is added in this step.
 
+### Worker-session refresh/apply foundation
+
+ManagedSession::refreshAndReconnect composes SubscriptionService refresh with
+controlled reconnect for the same Ready group. It rejects invalid timeout or
+missing pinned core before fetch. The commit validator projects the downloaded
+profile through the execution policy and checks that projection with pinned
+mihomo BEFORE saving, so a resource-policy failure cannot replace the stored
+snapshot. The original full source is stored, not its projection.
+
+Real-mihomo runtime fixture with an injected synthetic fetcher PASS:
+no fetch on bad timeout/missing core; fetch failure and resource rejection keep
+PID/generation/Ready/source; successful refresh reaches Applied; occupied API
+replacement returns false/Restored while retaining the saved candidate.
+MANAGED_REFRESH_VALIDATE_STORE_APPLY_AND_RESTORE_PASS. Windows ordinary and
+fixture builds, CTest6/6, parser39/39/process fixtures, production bridge E2E
+and full real runtime PASS. Transport in this combined test is synthetic, NOT
+HTTPS; earlier HTTPS refresh tests are separate.
+
+This method is NOT exposed through controller/application/bridge yet. The
+refresh lock ends before reconnect loads the candidate; a concurrent writer
+can replace it in that interval. Exact committed-candidate capture or locking
+across refresh/apply is required before exposure. No atomic disk+runtime
+transaction, persistent last-working restore or automatic scheduler is claimed.
+Combined HTTPS→runtime apply, concurrent writers, expiry during validation,
+metadata rollback and actual endpoint transition remain NOT RUN.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

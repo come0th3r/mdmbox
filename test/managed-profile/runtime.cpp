@@ -341,6 +341,44 @@ int main(int argc, char **argv) {
     }
     if (!store.commit(71, source, validate, error)) return 99;
     QTextStream(stdout) << "MANAGED_RECONNECT_FORCED_STOP_NO_REPLACEMENT_OR_RESTORE_PASS cases=2\n";
+    if (!session.start(store, 71, executable, mixedPort, apiPort, 10000, error)) return 102;
+    int fetchCalls = 0;
+    int fetchMode = 0;
+    const auto refreshFetch = [&](const NekoGui_sub::ManagedSubscriptionRequest &request, const QString &identity,
+                                  NekoGui_sub::SubscriptionDownload &download, QString &, const std::atomic_bool *) {
+        ++fetchCalls;
+        if (request.url.scheme() != "https" || identity.isEmpty() || fetchMode == 0) return false;
+        download.source = fetchMode == 1 ? source + "rule-providers: {external: {type: http, url: 'https://example.invalid/rules', path: rules.yaml}}\n"
+                                        : failedCandidate;
+        return true;
+    };
+    const auto refreshApply = [&](const QString &core, int timeout, int port) {
+        return session.refreshAndReconnect(store, 71, QUrl("https://example.invalid/synthetic"), "1.0.0",
+            snapshots.path(), refreshFetch, core, mixedPort, port, timeout, error);
+    };
+    const auto refreshPid = session.processId();
+    const auto refreshGeneration = ownership.generation(Ownership::Owner::Managed);
+    if (refreshApply(executable, 0, apiPort) || refreshApply(executable + ".missing", 10000, apiPort) || fetchCalls != 0)
+        return 103;
+    for (int mode : {0, 1}) {
+        fetchMode = mode;
+        if (refreshApply(executable, 10000, apiPort) || error.isEmpty() ||
+            session.reconnectOutcome() != NekoGui_sub::ManagedSession::ReconnectOutcome::Rejected ||
+            session.processId() != refreshPid || session.state() != NekoGui_sub::ManagedCoreProcess::State::Ready ||
+            ownership.generation(Ownership::Owner::Managed) != refreshGeneration ||
+            !store.load(71, saved, error) || saved.source != source) return 104;
+    }
+    fetchMode = 2;
+    if (!refreshApply(executable, 10000, apiPort) || fetchCalls != 3 ||
+        session.reconnectOutcome() != NekoGui_sub::ManagedSession::ReconnectOutcome::Applied ||
+        !store.load(71, saved, error) || saved.source != failedCandidate) return 105;
+    if (!occupiedApi.listen(QHostAddress::LocalHost, 0) || refreshApply(executable, 500, occupiedApi.serverPort()) ||
+        session.reconnectOutcome() != NekoGui_sub::ManagedSession::ReconnectOutcome::Restored ||
+        session.state() != NekoGui_sub::ManagedCoreProcess::State::Ready || fetchCalls != 4 ||
+        !store.load(71, saved, error) || saved.source != failedCandidate) return 106;
+    occupiedApi.close();
+    if (!session.stop(error) || !portsClosed() || !store.commit(71, source, validate, error)) return 107;
+    QTextStream(stdout) << "MANAGED_REFRESH_VALIDATE_STORE_APPLY_AND_RESTORE_PASS\n";
     QTextStream(stdout) << "MANAGED_SNAPSHOT_SESSION_READINESS_STOP_PASS\n";
     {
         NekoGui_sub::ManagedSessionController controller;

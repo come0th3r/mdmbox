@@ -2,6 +2,7 @@
 
 #include "ManagedCoreProcess.hpp"
 #include "ManagedProfileStore.hpp"
+#include "SubscriptionService.hpp"
 #include <optional>
 #include <utility>
 
@@ -19,7 +20,13 @@ namespace NekoGui_sub {
                    int mixedPort, int apiPort, int readinessTimeoutMs, QString &error);
         bool stop(QString &error);
         bool reconnect(const ManagedProfileStore &store, int groupId, const QString &executable,
-                       int mixedPort, int apiPort, int readinessTimeoutMs, QString &error);
+                        int mixedPort, int apiPort, int readinessTimeoutMs, QString &error);
+        // Explicit worker-only refresh/apply; fetch is production HTTPS or a test fixture.
+        // False may leave a newly stored candidate; inspect outcome for runtime restore.
+        bool refreshAndReconnect(ManagedProfileStore &store, int groupId, const QUrl &url,
+                                 const QString &appVersion, const QString &identityDirectory,
+                                 const SubscriptionService::Fetcher &fetch, const QString &executable,
+                                 int mixedPort, int apiPort, int readinessTimeoutMs, QString &error);
         int groupId() const { return activeGroup; }
         ManagedCoreProcess::State state() const { return runtime.state(); }
         qint64 processId() const { return runtime.processId(); }
