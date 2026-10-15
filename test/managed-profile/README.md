@@ -431,6 +431,24 @@ duplicate group switch/PID preservation and expired/exhausted refusal.
 Production UI/application-state wiring, active refresh/reconnect, unconfirmed
 cleanup fault injection and legacy recovery remain pending.
 
+### Async session controller and application ownership
+
+`ManagedSessionController` serializes start/stop on a dedicated QThread.
+ManagedSession and QProcess are created and destroyed on that worker. Queued
+status/result signals return command outcomes to the controller's owner thread;
+busy commands are refused. MainWindow owns the controller in YAML-enabled
+builds, but no user command or visual state binding is enabled yet.
+
+Windows production build PASS, CTest6/6 PASS, parser39/39 and process fixtures
+PASS, real-mihomo runtime `MANAGED_ASYNC_WORKER_STATUS_SHUTDOWN_PASS` exit0.
+The fixture covers async Ready, busy refusal, stop, missing snapshot failure,
+restart and controller destruction with an active child (closed ports/ownerNone).
+Actual MainWindow lifetime runtime is NOT RUN. Destruction waits for the current
+bounded operation plus cleanup; no cancellation/fast shutdown yet. Status is
+published after commands only: continuous crash monitoring is not implemented,
+so last Ready must not be interpreted as ongoing VPN connectivity. UI bridge,
+refresh/reconnect, TUN/system proxy and explicit legacy recovery are pending.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

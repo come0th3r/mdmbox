@@ -29,6 +29,7 @@
 namespace NekoGui_sys {
     class CoreProcess;
 }
+namespace NekoGui_sub { class ManagedSessionController; }
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -159,6 +160,9 @@ private:
     QShortcut *shortcut_esc = new QShortcut(QKeySequence("Esc"), this);
     //
     NekoGui_sys::CoreProcess *core_process;
+#ifndef NKR_NO_YAML
+    NekoGui_sub::ManagedSessionController *managed_session_controller = nullptr;
+#endif
     qint64 vpn_pid = 0;
     //
     bool qvLogAutoScoll = true;

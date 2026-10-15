@@ -3,6 +3,7 @@
 #include "../../sub/ManagedCoreProcess.hpp"
 #include "../../sub/CoreOwnership.hpp"
 #include "../../sub/ManagedSession.hpp"
+#include "../../sub/ManagedSessionController.hpp"
 #include <QDateTime>
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -255,5 +256,39 @@ int main(int argc, char **argv) {
         session.start(store, 73, executable, mixedPort, apiPort, 10000, error) || session.processId() != 0) return 51;
     if (!session.start(store, 71, executable, mixedPort, apiPort, 10000, error) || !session.stop(error)) return 46;
     QTextStream(stdout) << "MANAGED_SNAPSHOT_SESSION_READINESS_STOP_PASS\n";
+    {
+        NekoGui_sub::ManagedSessionController controller;
+        bool completed = false, succeeded = false;
+        int status = -1, group = -1;
+        qint64 pid = 0;
+        QObject::connect(&controller, &NekoGui_sub::ManagedSessionController::statusChanged,
+            &app, [&](int s, int g, qint64 p) { status = s; group = g; pid = p; });
+        QObject::connect(&controller, &NekoGui_sub::ManagedSessionController::operationFinished,
+            &app, [&](bool ok, const QString &) { completed = true; succeeded = ok; });
+        auto await = [&] {
+            QElapsedTimer timer;
+            timer.start();
+            while (!completed && timer.elapsed() < 30000) {
+                QEventLoop pause;
+                QTimer::singleShot(10, &pause, &QEventLoop::quit);
+                pause.exec();
+            }
+            return completed;
+        };
+        if (!controller.start(snapshots.path(), 71, executable, mixedPort, apiPort, 10000) ||
+            !controller.busy() || controller.stop() ||
+            !await() || !succeeded || controller.busy() || group != 71 || pid == 0 ||
+            status != static_cast<int>(NekoGui_sub::ManagedCoreProcess::State::Ready)) return 52;
+        completed = false;
+        if (!controller.stop() || !await() || !succeeded || group != -1 || pid != 0 || !portsClosed()) return 53;
+        completed = false;
+        if (!controller.start(snapshots.path(), 999, executable, mixedPort, apiPort, 10000) ||
+            !await() || succeeded || pid != 0) return 54;
+        completed = false;
+        if (!controller.start(snapshots.path(), 71, executable, mixedPort, apiPort, 10000) ||
+            !await() || !succeeded) return 55;
+    } // Controller destruction must stop and destroy session on its worker.
+    if (!portsClosed() || ownership.owner() != Ownership::Owner::None) return 56;
+    QTextStream(stdout) << "MANAGED_ASYNC_WORKER_STATUS_SHUTDOWN_PASS\n";
     return 0;
 }

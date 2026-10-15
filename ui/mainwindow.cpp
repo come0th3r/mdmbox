@@ -56,6 +56,10 @@ void UI_InitMainWindow() {
     mainwindow = new MainWindow;
 }
 
+#ifndef NKR_NO_YAML
+#include "sub/ManagedSessionController.hpp"
+#endif
+
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
     mainwindow = this;
     MW_dialog_message = [=](const QString &a, const QString &b) {
@@ -68,6 +72,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // Setup misc UI
     themeManager->ApplyTheme(NekoGui::dataStore->theme);
     ui->setupUi(this);
+#ifndef NKR_NO_YAML
+    managed_session_controller = new NekoGui_sub::ManagedSessionController(this);
+#endif
     //
     connect(ui->menu_start, &QAction::triggered, this, [=]() { neko_start(); });
     connect(ui->menu_stop, &QAction::triggered, this, [=]() { neko_stop(); });
@@ -490,6 +497,9 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 }
 
 MainWindow::~MainWindow() {
+#ifndef NKR_NO_YAML
+    delete managed_session_controller;
+#endif
     delete ui;
 }
 
