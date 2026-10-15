@@ -436,6 +436,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     refresh_status();
 
     // Prepare core
+#ifndef MDMBOX_ISOLATED_APPLICATION_TEST
     NekoGui::dataStore->core_token = GetRandomString(32);
     NekoGui::dataStore->core_port = MkPort();
     if (NekoGui::dataStore->core_port <= 0) NekoGui::dataStore->core_port = 19810;
@@ -482,6 +483,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         }
     }
 
+#endif // Isolated production-graph fixtures must never auto-start legacy/OS modes.
     connect(qApp, &QGuiApplication::commitDataRequest, this, &MainWindow::on_commitDataRequest);
 
     auto t = new QTimer;

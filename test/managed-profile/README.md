@@ -543,6 +543,34 @@ This is NOT a production MainWindow launch E2E. Actual group→JS→production
 bridge→MainWindow→core→completion, stop transport, mode transitions, navigation
 lifetime and no-YAML build remain NOT RUN.
 
+### Production bridge start/stop E2E
+
+The production-graph parser runner now accepts `--managed-bridge-e2e`.
+It creates an isolated cwd, real database group and validated synthetic full
+snapshot, constructs actual MainWindow/controller and shell bridge, then uses
+an off-the-record WebEngine page with local synthetic HTML to invoke:
+JS Start → busy Stop refusal → real mihomo Ready → JS completion → JS Stop →
+JS stopped. It checks all three command acknowledgements, matching group ID,
+no VPN claim, closed 17890/19090 ports, ownershipNone and unchanged source.
+Actual MainWindow TUN/system proxy enable methods are called while active and
+must refuse before side effects, leaving both flags false.
+
+The parser build defines MDMBOX_ISOLATED_APPLICATION_TEST to exclude automatic
+legacy daemon/remembered system-mode startup only. Ordinary production startup
+is unchanged. Shell loadContent=false avoids design HTML, remote assets and
+periodic refresh. WebEngine test code lives in a separate static library so Qt
+QML compile definitions do not enable the incompatible legacy ZXing QML path.
+The executable directory must contain pinned mihomo.exe and the console signal
+helper; the fixture does not install or overwrite runtime binaries.
+
+Windows production/fixture builds PASS, this E2E PASS twice,
+`MANAGED_PRODUCTION_BRIDGE_JS_START_BUSY_READY_STOP_PASS`, CTest6/6 PASS,
+parser39/39/process fixtures PASS, full mihomo smoke PASS exit0/forced0.
+Known GPU/font/offscreen/libpng/deprecation warnings remain.
+Production hookPage helper/CustomEvent/visible HTML, ordinary startup with a
+legacy daemon, crash-to-JS, navigation/reload, destruction while pending,
+no-YAML and OS proxy/DNS/routes snapshots remain NOT RUN.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

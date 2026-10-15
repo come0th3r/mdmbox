@@ -312,7 +312,15 @@ if (MDMBOX_SUBSCRIPTION_PARSER_TEST)
     set_target_properties(${NKR_APP_TARGET} PROPERTIES
             WIN32_EXECUTABLE FALSE
             OUTPUT_NAME mdmbox_subscription_parser_test
-            PDB_NAME mdmbox_subscription_parser_test)
+             PDB_NAME mdmbox_subscription_parser_test)
+    target_compile_definitions(${NKR_APP_TARGET} PRIVATE MDMBOX_ISOLATED_APPLICATION_TEST)
+    if (NOT NKR_NO_YAML)
+        find_package(Qt6 REQUIRED COMPONENTS WebEngineWidgets WebChannel)
+        add_library(mdmbox_managed_bridge_fixture STATIC test/subscription-parser/ManagedBridgeFixture.cpp)
+        target_include_directories(mdmbox_managed_bridge_fixture PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+        target_link_libraries(mdmbox_managed_bridge_fixture PRIVATE Qt6::WebEngineWidgets Qt6::WebChannel Qt6::Svg)
+        target_link_libraries(${NKR_APP_TARGET} PRIVATE mdmbox_managed_bridge_fixture)
+    endif ()
 endif ()
 
 # Target Source Translations

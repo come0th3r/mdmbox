@@ -490,7 +490,7 @@ QJsonObject buildRoutingState() {
 
 }
 
-MdmBoxShellWindow::MdmBoxShellWindow(QWidget *parent) : QMainWindow(parent) {
+MdmBoxShellWindow::MdmBoxShellWindow(QWidget *parent, bool loadContent) : QMainWindow(parent) {
     setWindowTitle(QStringLiteral("MDMBOX"));
     resize(1440, 920);
 
@@ -518,9 +518,10 @@ MdmBoxShellWindow::MdmBoxShellWindow(QWidget *parent) : QMainWindow(parent) {
     refreshTimer = new QTimer(this);
     refreshTimer->setInterval(1200);
     connect(refreshTimer, &QTimer::timeout, this, &MdmBoxShellWindow::refreshPageState);
-    refreshTimer->start();
-
-    navigate(currentPage);
+    if (loadContent) {
+        refreshTimer->start();
+        navigate(currentPage);
+    }
 }
 
 MdmBoxShellWindow::~MdmBoxShellWindow() = default;

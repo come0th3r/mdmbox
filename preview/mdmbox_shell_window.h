@@ -15,7 +15,7 @@ class MdmBoxShellWindow final : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit MdmBoxShellWindow(QWidget *parent = nullptr);
+    explicit MdmBoxShellWindow(QWidget *parent = nullptr, bool loadContent = true);
     ~MdmBoxShellWindow() override;
 
     void navigate(const QString &pageKey);

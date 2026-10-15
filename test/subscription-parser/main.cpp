@@ -13,6 +13,7 @@
 #include <QTextStream>
 #ifndef NKR_NO_YAML
 #include "ManagedRefreshFixture.hpp"
+int runManagedBridgeFixture(QApplication &app);
 #endif
 
 class WorkingDirectoryGuard {
@@ -33,7 +34,11 @@ int main(int argc, char **argv) {
         QTimer::singleShot(10000, &child, &QCoreApplication::quit);
         return child.exec();
     }
+    QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
+#ifndef NKR_NO_YAML
+    if (app.arguments().contains(QStringLiteral("--managed-bridge-e2e"))) return runManagedBridgeFixture(app);
+#endif
     // Production window installs these callbacks; isolated runner must supply safe sinks.
     MW_show_log = [](QString) {};
     MW_dialog_message = [](QString, QString) {};
