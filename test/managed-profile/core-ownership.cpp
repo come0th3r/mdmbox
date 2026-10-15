@@ -1,6 +1,7 @@
 #include "../../sub/CoreOwnership.hpp"
 #include "../../sub/LegacyCoreLifecycle.hpp"
 #include "../../sys/CoreProcessGeneration.hpp"
+#include "../../sub/ManagedLaunchPolicy.hpp"
 #include <QCoreApplication>
 #include <QTextStream>
 #include <atomic>
@@ -135,6 +136,18 @@ int main(int argc, char **argv) {
         eventOwnership.markUncertain(Ownership::Owner::Legacy, error, oldOwner) ||
         eventOwnership.state() != Ownership::State::Held) return 32;
     QTextStream(stdout) << "DAEMON_STALE_EVENT_GENERATION_PASS\n";
+    using NekoGui_sub::ManagedLaunchPolicy;
+    for (int bits = 0; bits < 64; ++bits) {
+        const bool exists = bits & 1, archived = bits & 2, proxy = bits & 4,
+                   tun = bits & 8, legacy = bits & 16, exiting = bits & 32;
+        const bool expected = exists && !archived && !proxy && !tun && !legacy && !exiting;
+        if (ManagedLaunchPolicy::allow(exists, archived, "mihomo-full", proxy, tun, legacy, exiting, error) != expected ||
+            error.isEmpty() != expected) return 33;
+    }
+    for (const auto &kind : {QString(), QStringLiteral("links"), QStringLiteral("unknown")}) {
+        if (ManagedLaunchPolicy::allow(true, false, kind, false, false, false, false, error) || error.isEmpty()) return 34;
+    }
+    QTextStream(stdout) << "MANAGED_LAUNCH_POLICY_MATRIX_PASS cases=67\n";
     QTextStream(stdout) << "CORE_SINGLE_OWNER_ARBITRATION_PASS\n";
     return 0;
 }

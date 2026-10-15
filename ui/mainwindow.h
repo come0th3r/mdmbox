@@ -79,6 +79,9 @@ public:
 
     [[nodiscard]] QJsonObject shellSignalStats() const;
     [[nodiscard]] QJsonObject shellManagedRuntimeState() const;
+    // Explicit loopback-only commands, not the general VPN connect action.
+    bool managedLoopbackStart(int groupId, QString &error);
+    bool managedLoopbackStop(QString &error);
 
     [[nodiscard]] QString shellLogText() const;
 

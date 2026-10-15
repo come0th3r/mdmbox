@@ -482,6 +482,23 @@ Actual JS/QWebChannel delivery, visible rendering and no-YAML build are NOT RUN.
 ControllerReady is initial authenticated readiness plus process-exit monitoring,
 not ongoing API or data-path health. No start/stop bridge commands are added.
 
+### Narrow application loopback command adapter
+
+MainWindow now has explicit C++ managedLoopbackStart/Stop methods (not the
+general connect toggle). Start validates the existing group is nonarchived
+mihomo-full and refuses shutdown, active system proxy/TUN, started legacy or
+Legacy ownership and busy controller. Store/executable/ports are internal fixed
+values: managed-subscriptions, appdir/mihomo.exe, 17890/19090, readiness10s.
+True means queued, not successful connection. Bind conflicts still require
+runtime failure handling. No JS mutation command is exposed yet.
+
+Windows production build PASS, CTest6/6 PASS,
+`MANAGED_LAUNCH_POLICY_MATRIX_PASS cases=67`, parser39/39/process fixtures PASS,
+full mihomo runtime PASS exit0/forced0. Actual MainWindow command E2E, no-YAML
+and fixed-port collisions NOT RUN. Reciprocal system-mode guards during
+pending/active managed sessions are still required before exposing commands;
+application flags are not OS-state verification.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

@@ -58,6 +58,7 @@ void UI_InitMainWindow() {
 
 #ifndef NKR_NO_YAML
 #include "sub/ManagedSessionController.hpp"
+#include "sub/ManagedLaunchPolicy.hpp"
 #endif
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
@@ -523,6 +524,41 @@ QJsonObject MainWindow::shellManagedRuntimeState() const {
             {QStringLiteral("groupId"), -1},
             {QStringLiteral("controllerReady"), false},
             {QStringLiteral("vpnConnected"), false}};
+}
+
+bool MainWindow::managedLoopbackStart(int groupId, QString &error) {
+    error.clear();
+#ifndef NKR_NO_YAML
+    const auto group = NekoGui::profileManager->GetGroup(groupId);
+    if (!NekoGui_sub::ManagedLaunchPolicy::allow(group != nullptr, group && group->archive,
+            group ? group->subscription_kind : QString(), NekoGui::dataStore->spmode_system_proxy,
+            NekoGui::dataStore->spmode_vpn, NekoGui::dataStore->started_id >= 0 ||
+            core_ownership.owner() == NekoGui_sub::CoreOwnership::Owner::Legacy,
+            NekoGui::dataStore->prepare_exit, error)) return false;
+    if (!managed_session_controller || managed_session_controller->busy()) {
+        error = QStringLiteral("Managed controller is unavailable or busy");
+        return false;
+    }
+    // Ports are explicit internal defaults; they do not alter legacy settings.
+    // The runtime validator/listener startup must still handle bind conflicts.
+    return managed_session_controller->start(QStringLiteral("managed-subscriptions"), groupId,
+        QCoreApplication::applicationDirPath() + QStringLiteral("/mihomo.exe"), 17890, 19090, 10000);
+#else
+    Q_UNUSED(groupId)
+    error = QStringLiteral("Managed runtime is unavailable in this build");
+    return false;
+#endif
+}
+
+bool MainWindow::managedLoopbackStop(QString &error) {
+    error.clear();
+#ifndef NKR_NO_YAML
+    if (managed_session_controller && !managed_session_controller->busy()) return managed_session_controller->stop();
+    error = QStringLiteral("Managed controller is unavailable or busy");
+#else
+    error = QStringLiteral("Managed runtime is unavailable in this build");
+#endif
+    return false;
 }
 
 int MainWindow::shellLatencyMs() const {
