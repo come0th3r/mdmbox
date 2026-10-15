@@ -270,6 +270,23 @@ shutdown. Actual GUI/RPC fault injection and external-process shutdown
 confirmation remain NOT RUN; these component tests do not establish safe
 automatic legacy recovery.
 
+### Legacy stop outcome policy
+
+Production `neko_stop` and component fixtures share
+`LegacyCoreLifecycle::finishStop`. Release requires a successful RPC stop,
+confirmed external-process cleanup and no previously uncertain outcome. A
+later successful reply cannot clear Uncertain because it may come from a new
+daemon. Fixtures cover all four RPC/cleanup result combinations, foreign-owner
+protection and rejection of that later reply (`LEGACY_STOP_OUTCOME_MATRIX_PASS`).
+
+Production now waits up to 5 seconds for the queued external cleanup callback.
+It removes only QProcess entries confirmed NotRunning and retains handles for
+entries still alive. This is not descendant-tree or OS-resource confirmation.
+Windows production build PASS, CTest 4/4 PASS, parser 39/39 PASS and full
+real-mihomo runtime PASS exit 0, forced=0. Actual GUI delayed cleanup, timeout
+and RPC fault injection, real legacy external-child fixtures and automatic
+recovery remain NOT RUN / pending.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

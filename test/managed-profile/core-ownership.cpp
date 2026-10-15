@@ -1,4 +1,5 @@
 #include "../../sub/CoreOwnership.hpp"
+#include "../../sub/LegacyCoreLifecycle.hpp"
 #include <QCoreApplication>
 #include <QTextStream>
 #include <atomic>
@@ -42,6 +43,32 @@ int main(int argc, char **argv) {
     if (ownership.markUncertain(Ownership::Owner::Legacy, error) || error.isEmpty() ||
         ownership.state() != Ownership::State::Free) return 15;
     QTextStream(stdout) << "CORE_UNCERTAIN_OUTCOME_TRANSITIONS_PASS\n";
+    using NekoGui_sub::LegacyCoreLifecycle;
+    for (const bool rpc : {false, true}) {
+        for (const bool external : {false, true}) {
+            Ownership fixture;
+            if (!fixture.acquire(Ownership::Owner::Legacy, error)) return 16;
+            const bool stopped = LegacyCoreLifecycle::finishStop(fixture, rpc, external, error);
+            if (stopped != (rpc && external)) return 17;
+            if (stopped) {
+                if (fixture.state() != Ownership::State::Free || !error.isEmpty() ||
+                    !fixture.acquire(Ownership::Owner::Managed, error)) return 18;
+            } else {
+                if (fixture.owner() != Ownership::Owner::Legacy || fixture.state() != Ownership::State::Uncertain ||
+                    error.isEmpty() || fixture.acquire(Ownership::Owner::Managed, error)) return 19;
+                // A later successful reply may belong to a restarted daemon.
+                if (LegacyCoreLifecycle::finishStop(fixture, true, true, error) ||
+                    fixture.state() != Ownership::State::Uncertain) return 20;
+            }
+        }
+    }
+    Ownership foreign;
+    if (LegacyCoreLifecycle::finishStop(foreign, true, true, error) ||
+        foreign.state() != Ownership::State::Free ||
+        !foreign.acquire(Ownership::Owner::Managed, error) ||
+        LegacyCoreLifecycle::finishStop(foreign, false, false, error) ||
+        foreign.owner() != Ownership::Owner::Managed || foreign.state() != Ownership::State::Held) return 21;
+    QTextStream(stdout) << "LEGACY_STOP_OUTCOME_MATRIX_PASS\n";
     QTextStream(stdout) << "CORE_SINGLE_OWNER_ARBITRATION_PASS\n";
     return 0;
 }

@@ -5,6 +5,7 @@
 #include "db/ConfigBuilder.hpp"
 #include "db/traffic/TrafficLooper.hpp"
 #include "rpc/gRPC.h"
+#include "sub/LegacyCoreLifecycle.hpp"
 #include "ui/widget/MessageBoxTimer.h"
 
 #include <QTimer>
@@ -442,15 +443,26 @@ void MainWindow::neko_stop(bool crash, bool sem) {
     }
 
     auto neko_stop_stage2 = [=] {
+        struct ExternalStopResult {
+            QSemaphore completed;
+            bool stopped = false;
+        };
+        auto externalStop = std::make_shared<ExternalStopResult>();
         runOnUiThread(
             [=] {
-                while (!NekoGui_sys::running_ext.empty()) {
-                    auto extC = NekoGui_sys::running_ext.front();
+                auto &processes = NekoGui_sys::running_ext;
+                for (auto it = processes.begin(); it != processes.end();) {
+                    auto extC = *it;
                     extC->Kill();
-                    NekoGui_sys::running_ext.pop_front();
+                    // Keep the handle tracked when Kill's wait did not confirm exit.
+                    if (extC->state() == QProcess::NotRunning) it = processes.erase(it);
+                    else ++it;
                 }
+                externalStop->stopped = processes.empty();
+                externalStop->completed.release();
             },
             DS_cores);
+        const bool externalProcessesStopped = externalStop->completed.tryAcquire(1, 5000) && externalStop->stopped;
 
 #ifndef NKR_NO_GRPC
         NekoGui_traffic::trafficLooper->loop_enabled = false;
@@ -469,7 +481,7 @@ void MainWindow::neko_stop(bool crash, bool sem) {
             QString error = defaultClient->Stop(&rpcOK);
             if (!rpcOK || !error.isEmpty()) {
                 QString ignored;
-                core_ownership.markUncertain(NekoGui_sub::CoreOwnership::Owner::Legacy, ignored);
+                NekoGui_sub::LegacyCoreLifecycle::finishStop(core_ownership, false, externalProcessesStopped, ignored);
             }
             if (rpcOK && !error.isEmpty()) {
                 runOnUiThread([=] { MessageBoxWarning("Stop return error", error); });
@@ -477,13 +489,16 @@ void MainWindow::neko_stop(bool crash, bool sem) {
             } else if (!rpcOK) {
                 return false;
             }
+        }
+#endif
+
+        if (!crash) {
             QString ownershipError;
-            if (!core_ownership.release(NekoGui_sub::CoreOwnership::Owner::Legacy, ownershipError)) {
-                MW_show_log(QStringLiteral("Legacy core ownership release refused: ") + ownershipError);
+            if (!NekoGui_sub::LegacyCoreLifecycle::finishStop(core_ownership, true, externalProcessesStopped, ownershipError)) {
+                MW_show_log(ownershipError);
                 return false;
             }
         }
-#endif
 
         NekoGui::dataStore->UpdateStartedId(-1919);
         NekoGui::dataStore->need_keep_vpn_off = false;
