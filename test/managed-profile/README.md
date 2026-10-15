@@ -184,6 +184,16 @@ case can also observe an early child exit on bind conflict; it does not prove
 every HTTP parser rejection branch. Oversize/malformed/wrong-version/redirect,
 slow-stream and actual core wrong-token fault injection remain NOT RUN.
 
+### Unexpected child exit and owner destruction
+
+Windows smoke additionally terminates its ready core through a held process
+handle (avoids PID-reuse targeting), waits for Failed, rejects further readiness
+and refuses to label the subsequent stop graceful. Separately destroys a ready
+scoped owner without explicit stop and verifies child exit through a held kernel
+handle. Both cases require API/mixed ports closed. Windows build, base CTest
+1/1 and two full smoke runs PASS. This tests child crash simulation and ordinary
+C++ destructor cleanup, NOT parent-process crash/power loss or descendant trees.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

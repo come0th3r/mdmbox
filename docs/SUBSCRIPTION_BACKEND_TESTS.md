@@ -409,3 +409,17 @@ Initial standalone build exposed Windows min/max macros; parenthesized standard
 functions fixed it, then both ordinary and isolated builds passed.
 Oversize/malformed/wrong-version/redirect/slow-stream and actual core wrong-token
 fault injection **NOT RUN**; GUI/production stop adapter/arbitration pending.
+
+## Unexpected child exit / owner destructor — 2026-10-15
+
+Test-only Windows fault injection targets the ready owned core using a held
+kernel process handle, terminates it with synthetic exit 42 and observes Failed.
+Readiness is refused and subsequent stop returns failure, never graceful success.
+Separate scoped-owner test omits explicit stop, then checks the held child's
+kernel handle is signalled after destructor cleanup. Both require closed API
+and mixed listeners. No production implementation changes were necessary.
+
+Windows smoke build **PASS**, base CTest **1/1 PASS**, full runtime **2/2 PASS**,
+exit 0, including prior HTTP/auth/readiness/graceful/forced-cleanup checks.
+This does not cover parent-process crash, power loss, descendant process trees,
+unconfirmed-kill branch, OS snapshots or clean VM. These remain **NOT RUN**.

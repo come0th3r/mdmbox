@@ -15,6 +15,10 @@
 #include <QTcpSocket>
 #include <QTextStream>
 #include <QTimer>
+#ifdef Q_OS_WIN
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     if (app.arguments().size() != 2) return 1;
@@ -181,5 +185,41 @@ int main(int argc, char **argv) {
         child.state() != NekoGui_sub::ManagedCoreProcess::State::Failed) return 26;
     blockedApi.close();
     QTextStream(stdout) << "MIHOMO_AUTHENTICATED_READINESS_FAILURE_PASS\n";
+#ifdef Q_OS_WIN
+    const auto portsClosed = [&] {
+        QTcpSocket api, mixedSocket;
+        api.connectToHost(QHostAddress::LocalHost, apiPort);
+        mixedSocket.connectToHost(QHostAddress::LocalHost, mixedPort);
+        return !api.waitForConnected(500) && !mixedSocket.waitForConnected(500);
+    };
+    if (!child.start(executable, panel, mixedPort, apiPort, token, error) || !child.waitReady(10000, error)) return 27;
+    // Hold a kernel handle, not just a PID: never terminate a recycled process ID.
+    HANDLE crashed = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, static_cast<DWORD>(child.processId()));
+    if (!crashed) return 28;
+    const bool killed = TerminateProcess(crashed, 42) && WaitForSingleObject(crashed, 3000) == WAIT_OBJECT_0;
+    CloseHandle(crashed);
+    if (!killed) return 29;
+    QElapsedTimer observed;
+    observed.start();
+    while (child.state() != NekoGui_sub::ManagedCoreProcess::State::Failed && observed.elapsed() < 3000) {
+        QEventLoop pause;
+        QTimer::singleShot(20, &pause, &QEventLoop::quit);
+        pause.exec();
+    }
+    if (child.state() != NekoGui_sub::ManagedCoreProcess::State::Failed || child.waitReady(1000, error) ||
+        child.stop(signal, error) || error.isEmpty() || child.processId() != 0 || !portsClosed()) return 30;
+    QTextStream(stdout) << "MIHOMO_UNEXPECTED_EXIT_STATE_PASS\n";
+    HANDLE owned = nullptr;
+    {
+        NekoGui_sub::ManagedCoreProcess scoped;
+        if (!scoped.start(executable, panel, mixedPort, apiPort, token, error) || !scoped.waitReady(10000, error)) return 31;
+        owned = OpenProcess(SYNCHRONIZE, FALSE, static_cast<DWORD>(scoped.processId()));
+        if (!owned) return 32;
+    } // Destructor must reap the owned core even without an explicit stop.
+    const bool reaped = WaitForSingleObject(owned, 3000) == WAIT_OBJECT_0;
+    CloseHandle(owned);
+    if (!reaped || !portsClosed()) return 33;
+    QTextStream(stdout) << "MIHOMO_DESTRUCTOR_CHILD_CLEANUP_PASS\n";
+#endif
     return 0;
 }
