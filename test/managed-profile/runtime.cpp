@@ -287,6 +287,31 @@ int main(int argc, char **argv) {
         completed = false;
         if (!controller.start(snapshots.path(), 71, executable, mixedPort, apiPort, 10000) ||
             !await() || !succeeded) return 55;
+#ifdef Q_OS_WIN
+        bool runtimeFailed = false;
+        QObject::connect(&controller, &NekoGui_sub::ManagedSessionController::runtimeFailed,
+            &app, [&](const QString &) { runtimeFailed = true; });
+        HANDLE asyncChild = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE,
+                                        static_cast<DWORD>(controller.processId()));
+        if (!asyncChild) return 57;
+        const bool terminated = TerminateProcess(asyncChild, 42) && WaitForSingleObject(asyncChild, 3000) == WAIT_OBJECT_0;
+        CloseHandle(asyncChild);
+        if (!terminated) return 58;
+        QElapsedTimer crashDeadline;
+        crashDeadline.start();
+        while (!runtimeFailed && crashDeadline.elapsed() < 5000) {
+            QEventLoop pause;
+            QTimer::singleShot(10, &pause, &QEventLoop::quit);
+            pause.exec();
+        }
+        if (!runtimeFailed || controller.state() != static_cast<int>(NekoGui_sub::ManagedCoreProcess::State::Failed) ||
+            controller.processId() != 0 || controller.groupId() != -1 || controller.busy() ||
+            !portsClosed() || ownership.owner() != Ownership::Owner::None) return 59;
+        completed = false;
+        if (!controller.start(snapshots.path(), 71, executable, mixedPort, apiPort, 10000) ||
+            !await() || !succeeded) return 60;
+        QTextStream(stdout) << "MANAGED_ASYNC_UNEXPECTED_EXIT_MONITOR_PASS\n";
+#endif
     } // Controller destruction must stop and destroy session on its worker.
     if (!portsClosed() || ownership.owner() != Ownership::Owner::None) return 56;
     QTextStream(stdout) << "MANAGED_ASYNC_WORKER_STATUS_SHUTDOWN_PASS\n";

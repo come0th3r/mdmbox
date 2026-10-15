@@ -449,6 +449,23 @@ published after commands only: continuous crash monitoring is not implemented,
 so last Ready must not be interpreted as ongoing VPN connectivity. UI bridge,
 refresh/reconnect, TUN/system proxy and explicit legacy recovery are pending.
 
+### Async unexpected-exit monitor
+
+Controller now polls process liveness on its worker every 100ms while a session
+is active. An executing guard suppresses monitor reentry during nested readiness
+event loops. Unexpected exit triggers cleanup, a one-shot Failed status and a
+separate runtimeFailed signal. Owner-thread getters cache the latest delivered
+state/group/PID. Manual restart re-enables monitoring; no automatic restart is
+added. This detects process exit, not API stalls or lost VPN connectivity.
+
+Windows production build PASS, CTest6/6 PASS, parser39/39 plus process fixtures
+PASS, full real-mihomo smoke PASS exit0/forced0.
+`MANAGED_ASYNC_UNEXPECTED_EXIT_MONITOR_PASS` uses a held Windows process handle
+to terminate the actual managed child with exit42 and verifies Failed delivery,
+cached PID0/group-1, closed ports, ownershipNone and successful manual restart.
+Visible application/bridge wiring, cancellation, API/data-path health checks
+and legacy recovery remain pending.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under
