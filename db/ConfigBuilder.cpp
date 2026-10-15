@@ -12,6 +12,17 @@
 
 namespace NekoGui {
     namespace {
+        QString legacyProfileError(const std::shared_ptr<ProxyEntity> &ent) {
+            if (!ent || !ent->bean) return QStringLiteral("Missing legacy profile");
+            const auto group = profileManager->GetGroup(ent->gid);
+            if (!group) return QStringLiteral("This profile is not in any group, your data may be corrupted.");
+            if (group->subscription_kind == "mihomo-full")
+                return QStringLiteral("Full mihomo subscriptions require the managed runtime; legacy profile fallback is disabled.");
+            if (group->subscription_kind != "links")
+                return QStringLiteral("Unsupported subscription kind; legacy profile fallback is disabled.");
+            return {};
+        }
+
         struct ProcessMatchRule {
             QStringList processName;
             QStringList processPath;
@@ -120,6 +131,8 @@ namespace NekoGui {
 
     std::shared_ptr<BuildConfigResult> BuildConfig(const std::shared_ptr<ProxyEntity> &ent, bool forTest, bool forExport) {
         auto result = std::make_shared<BuildConfigResult>();
+        result->error = legacyProfileError(ent);
+        if (!result->error.isEmpty()) return result;
         auto status = std::make_shared<BuildConfigStatus>();
         status->ent = ent;
         status->result = result;
@@ -148,6 +161,8 @@ namespace NekoGui {
 
         auto resolveChain = [=](const std::shared_ptr<ProxyEntity> &ent) {
             QList<std::shared_ptr<ProxyEntity>> resolved;
+            status->result->error = legacyProfileError(ent);
+            if (!status->result->error.isEmpty()) return resolved;
             if (ent->type == "chain") {
                 auto list = ent->ChainBean()->list;
                 std::reverse(std::begin(list), std::end(list));
@@ -230,6 +245,8 @@ namespace NekoGui {
         int index = 0;
 
         for (const auto &ent: ents) {
+            status->result->error = legacyProfileError(ent);
+            if (!status->result->error.isEmpty()) return {};
             // tagOut: v2ray outbound tag for a profile
             // profile2 (in) (global)   tag g-(id)
             // profile1                 tag (chainTag)-(id)

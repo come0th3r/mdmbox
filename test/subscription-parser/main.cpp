@@ -1,4 +1,6 @@
 #include "sub/GroupUpdater.hpp"
+#include "db/ConfigBuilder.hpp"
+#include "fmt/CustomBean.hpp"
 #include <QApplication>
 #include <QDir>
 #include <QFile>
@@ -112,6 +114,37 @@ int main(int argc, char **argv) {
                group->info == "synthetic metadata" && group->sub_last_update == 123456789 &&
                !QFile::exists("managed-subscriptions/" + QString::number(group->id) + ".json"))) return 14;
     QTextStream(stdout) << "GROUP_MODE_PERSISTENCE_AND_FAILURE_PRESERVATION_PASS\n";
+    // All modes must refuse stale legacy entries before generating any config.
+    for (const auto &kind : QStringList{"mihomo-full", "future-unsupported"}) {
+        group->subscription_kind = kind;
+        for (int mode = 0; mode < 3; ++mode) {
+            const auto result = NekoGui::BuildConfig(original, mode == 1, mode == 2);
+            if (!check(!result->error.isEmpty() && result->coreConfig.isEmpty() &&
+                       result->outboundStats.isEmpty() && result->extRs.empty())) return 16;
+        }
+        auto *bean = new NekoGui_fmt::CustomBean;
+        bean->core = "internal-full";
+        bean->config_simple = "{\"synthetic\":true}";
+        auto custom = std::make_shared<NekoGui::ProxyEntity>(bean, "custom");
+        custom->gid = group->id;
+        if (!check(NekoGui::BuildConfig(custom, false, false)->coreConfig.isEmpty())) return 17;
+        auto status = std::make_shared<NekoGui::BuildConfigStatus>();
+        status->result = std::make_shared<NekoGui::BuildConfigResult>();
+        // Chain members/front/global outbounds share this generation boundary.
+        if (!check(NekoGui::BuildChainInternal(0, {original}, status).isEmpty() &&
+                   !status->result->error.isEmpty() && status->result->extRs.empty())) return 18;
+    }
+    group->subscription_kind = "links";
+    auto *bean = new NekoGui_fmt::CustomBean;
+    bean->core = "internal-full";
+    bean->config_simple = "{\"synthetic\":true}";
+    auto custom = std::make_shared<NekoGui::ProxyEntity>(bean, "custom");
+    custom->gid = group->id;
+    const auto legacyConfig = NekoGui::BuildConfig(custom, false, false);
+    if (!check(legacyConfig->error.isEmpty() && legacyConfig->coreConfig.value("synthetic").toBool())) return 19;
+    group->subscription_kind = "mihomo-full";
+    if (!check(unchanged() && readBytes(group->fn) == managedGroup)) return 20;
+    QTextStream(stdout) << "LEGACY_MANAGED_FALLBACK_REFUSAL_PASS\n";
 #ifndef NKR_NO_YAML
     if (app.arguments().size() == 3) {
         if (!testManagedHttpsRefresh(app.arguments()[1], app.arguments()[2], group, unchanged)) return 15;

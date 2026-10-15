@@ -222,6 +222,15 @@ ports. Shared-console refusal, helper tampering, full installer delivery and
 multi-config artifact colocation remain NOT RUN. Existing older helper remarks
 above describe earlier revisions, not the current executable.
 
+### Legacy managed fallback refusal
+
+The production config builder refuses to generate a legacy config for
+`mihomo-full` and unknown subscription kinds. The isolated parser runner checks
+direct, `internal-full`, chain-member and front/global generation boundaries,
+while ordinary `links` behavior remains accepted. Windows production build PASS;
+parser runner 39/39 PASS; managed-profile CTest 3/3 and real runtime regression
+PASS. Managed application lifecycle and single-core arbitration remain pending.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

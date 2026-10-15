@@ -455,3 +455,17 @@ including HTTP/API/readiness/crash/destructor regressions. Default non-Windows
 terminate, shared-console refusal, helper tampering, multi-config placement,
 installer delivery and GUI/core ownership integration **NOT RUN**. Console member
 check is a safety gate, not a sandbox or proof against concurrent console changes.
+
+## Legacy fallback refusal — 2026-10-15
+
+`BuildConfig` now fails closed before legacy generation when the profile belongs
+to `mihomo-full` or an unknown subscription kind. The guard covers direct
+profiles, `internal-full`, chain members and the front/global chain generation
+boundary. Ordinary `links` groups retain the existing legacy path.
+
+Windows production Release build **PASS**. Isolated parser regression runner
+reported `GROUP_MODE_PERSISTENCE_AND_FAILURE_PRESERVATION_PASS`,
+`LEGACY_MANAGED_FALLBACK_REFUSAL_PASS`, and **39/39 checks PASS**. Existing
+managed-profile CTest **3/3 PASS** and real pinned-mihomo runtime **PASS** exit 0
+after the change. This prevents accidental legacy startup; it does not yet start
+managed mihomo from the application lifecycle or arbitrate two core owners.
