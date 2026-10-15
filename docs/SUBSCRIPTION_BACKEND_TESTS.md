@@ -390,3 +390,22 @@ and closed listeners. An unconfirmed kill disables temporary-home auto-remove;
 this rare branch is **NOT RUN**, as are destructor/crash/tree fault injection.
 No GUI command wiring, production stop adapter, authenticated readiness service,
 single-core ownership arbitration or OS snapshot verification is claimed.
+
+## Authenticated controller readiness — 2026-10-15
+
+ManagedCoreProcess now provides bounded `waitReady` and separate Ready state.
+Stored loopback port/token, NoProxy/manual redirects, max 500 ms per attempt,
+4096-byte body bound and exact JSON version `v1.19.32` required. Overall probe
+deadline 1..30000 ms; failure cleanup can additionally take up to 3 seconds.
+Ready means controller readiness only, never external VPN connected.
+
+Final Windows ordinary Release build **PASS**, base CTest **1/1 PASS**, runtime
+**2/2 PASS**: initial/repeated readiness, invalid-timeout PID/state preservation,
+stopped readiness refusal and foreign API listener returning 401 never accepted,
+with owned child cleaned up/Failed. Bind-conflict child exit is also possible
+in that negative case; no isolated coverage claim for every HTTP branch.
+HTTP data path/auth/graceful stop/forced failure cleanup remain PASS.
+Initial standalone build exposed Windows min/max macros; parenthesized standard
+functions fixed it, then both ordinary and isolated builds passed.
+Oversize/malformed/wrong-version/redirect/slow-stream and actual core wrong-token
+fault injection **NOT RUN**; GUI/production stop adapter/arbitration pending.

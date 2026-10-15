@@ -65,17 +65,11 @@ int main(int argc, char **argv) {
         delete reply;
         return status;
     };
-    QElapsedTimer deadline;
-    deadline.start();
     QByteArray body;
-    bool ready = false;
-    while (deadline.elapsed() < 10000 && child.state() == NekoGui_sub::ManagedCoreProcess::State::Running) {
-        if (get(true, body) == 200) { ready = true; break; }
-        QEventLoop pause;
-        QTimer::singleShot(50, &pause, &QEventLoop::quit);
-        pause.exec();
-    }
-    if (!ready || !QJsonDocument::fromJson(body).object().value("version").toString().contains("1.19.32")) return 8;
+    if (child.waitReady(0, error) || child.processId() != ownedPid ||
+        child.state() != NekoGui_sub::ManagedCoreProcess::State::Running) return 22;
+    if (!child.waitReady(10000, error) || child.state() != NekoGui_sub::ManagedCoreProcess::State::Ready ||
+        !child.waitReady(1000, error)) return 8;
     if (get(false, body) != 401 || get(true, body) != 200) return 9;
     QTcpSocket mixed;
     mixed.connectToHost(QHostAddress::LocalHost, mixedPort);
@@ -160,20 +154,32 @@ int main(int argc, char **argv) {
     QTextStream(stdout) << "MIHOMO_RUNTIME_API_AUTH_LISTENER_STOP_PASS forced=0\n";
     QTextStream(stdout) << "MIHOMO_CONSOLE_GRACEFUL_EXIT_PASS code=0\n";
     if (!child.start(executable, panel, mixedPort, apiPort, token, error)) return 19;
-    deadline.restart();
-    ready = false;
-    while (deadline.elapsed() < 10000 && child.state() == NekoGui_sub::ManagedCoreProcess::State::Running) {
-        if (get(true, body) == 200) { ready = true; break; }
-        QEventLoop pause;
-        QTimer::singleShot(50, &pause, &QEventLoop::quit);
-        pause.exec();
-    }
-    if (!ready || child.stop({}, error) || error.isEmpty() || child.processId() != 0 ||
+    if (!child.waitReady(10000, error) || child.stop({}, error) || error.isEmpty() || child.processId() != 0 ||
         child.state() != NekoGui_sub::ManagedCoreProcess::State::Failed) return 20;
     QTcpSocket forcedApiAfter, forcedMixedAfter;
     forcedApiAfter.connectToHost(QHostAddress::LocalHost, apiPort);
     forcedMixedAfter.connectToHost(QHostAddress::LocalHost, mixedPort);
     if (forcedApiAfter.waitForConnected(500) || forcedMixedAfter.waitForConnected(500)) return 21;
     QTextStream(stdout) << "MIHOMO_PROCESS_OWNERSHIP_FAILURE_CLEANUP_PASS\n";
+    if (child.waitReady(1000, error) || child.processId() != 0) return 23;
+    QTcpServer blockedApi;
+    if (!blockedApi.listen(QHostAddress::LocalHost, apiPort)) return 24;
+    QObject::connect(&blockedApi, &QTcpServer::newConnection, &app, [&] {
+        while (blockedApi.hasPendingConnections()) {
+            auto *socket = blockedApi.nextPendingConnection();
+            QObject::connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+            QObject::connect(socket, &QTcpSocket::readyRead, socket, [socket] {
+                socket->readAll();
+                socket->write("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                socket->disconnectFromHost();
+            });
+        }
+    });
+    // A foreign listener must not be mistaken for a ready owned core.
+    if (!child.start(executable, panel, mixedPort, apiPort, token, error)) return 25;
+    if (child.waitReady(1000, error) || child.processId() != 0 || error.isEmpty() ||
+        child.state() != NekoGui_sub::ManagedCoreProcess::State::Failed) return 26;
+    blockedApi.close();
+    QTextStream(stdout) << "MIHOMO_AUTHENTICATED_READINESS_FAILURE_PASS\n";
     return 0;
 }

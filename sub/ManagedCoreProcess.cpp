@@ -2,6 +2,15 @@
 #include "ManagedRuntimePolicy.hpp"
 #include "MihomoValidator.hpp"
 #include <QProcessEnvironment>
+#include <QElapsedTimer>
+#include <QEventLoop>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QNetworkAccessManager>
+#include <QNetworkProxy>
+#include <QNetworkReply>
+#include <QTimer>
+#include <algorithm>
 #ifdef Q_OS_WIN
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -19,11 +28,13 @@ namespace NekoGui_sub {
             }
         }
         home.reset(); // Never remove home while the owned child is known to be running.
+        controllerToken.clear();
+        controllerPort = 0;
         return true;
     }
 
     ManagedCoreProcess::State ManagedCoreProcess::state() const {
-        if (current == State::Running && process.state() == QProcess::NotRunning) return State::Failed;
+        if ((current == State::Running || current == State::Ready) && process.state() == QProcess::NotRunning) return State::Failed;
         return current;
     }
 
@@ -73,15 +84,77 @@ namespace NekoGui_sub {
             return false;
         }
         process.closeWriteChannel();
+        controllerPort = apiPort;
+        controllerToken = apiToken;
         current = State::Running; // Readiness belongs to authenticated API checks, not process start.
         return true;
+    }
+
+    bool ManagedCoreProcess::waitReady(int timeoutMs, QString &error) {
+        error.clear();
+        if (timeoutMs < 1 || timeoutMs > 30000) {
+            error = QStringLiteral("Managed readiness timeout must be 1..30000 ms");
+            return false;
+        }
+        if ((current != State::Running && current != State::Ready) || process.state() == QProcess::NotRunning) {
+            error = QStringLiteral("Managed readiness requires a live owned process");
+            return false;
+        }
+        current = State::Running;
+        QNetworkAccessManager manager;
+        manager.setProxy(QNetworkProxy::NoProxy);
+        QElapsedTimer deadline;
+        deadline.start();
+        bool refused = false;
+        while (deadline.elapsed() < timeoutMs && process.state() != QProcess::NotRunning && !refused) {
+            QNetworkRequest request(QUrl(QStringLiteral("http://127.0.0.1:%1/version").arg(controllerPort)));
+            request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+            request.setRawHeader("Authorization", "Bearer " + controllerToken);
+            auto *reply = manager.get(request);
+            reply->setReadBufferSize(4096);
+            QEventLoop loop;
+            QTimer timeout;
+            timeout.setSingleShot(true);
+            QByteArray body;
+            bool oversized = false;
+            const auto collect = [&] {
+                if (!reply->isOpen()) return;
+                body += reply->read(4097 - body.size());
+                if (body.size() > 4096) { oversized = true; reply->abort(); }
+            };
+            QObject::connect(reply, &QNetworkReply::readyRead, &loop, collect);
+            QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+            QObject::connect(&timeout, &QTimer::timeout, reply, &QNetworkReply::abort);
+            timeout.start((std::max)(1, (std::min)(500, timeoutMs - static_cast<int>(deadline.elapsed()))));
+            if (!reply->isFinished()) loop.exec();
+            collect();
+            const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            const bool accepted = !oversized && reply->error() == QNetworkReply::NoError && status == 200 &&
+                QJsonDocument::fromJson(body).object().value(QStringLiteral("version")).toString() == QStringLiteral("v1.19.32");
+            refused = oversized || status != 0;
+            delete reply;
+            if (accepted && process.state() != QProcess::NotRunning) {
+                current = State::Ready;
+                return true;
+            }
+            const auto remaining = timeoutMs - static_cast<int>(deadline.elapsed());
+            if (!refused && remaining > 0) {
+                QEventLoop pause;
+                QTimer::singleShot((std::min)(50, remaining), &pause, &QEventLoop::quit);
+                pause.exec();
+            }
+        }
+        forceCleanup();
+        current = State::Failed;
+        error = QStringLiteral("Managed controller readiness failed");
+        return false;
     }
 
     bool ManagedCoreProcess::stop(const StopSignal &signal, QString &error) {
         error.clear();
         if (process.state() == QProcess::NotRunning) {
-            const bool unexpectedlyExited = current == State::Running;
-            home.reset();
+            const bool unexpectedlyExited = current == State::Running || current == State::Ready;
+            forceCleanup();
             current = unexpectedlyExited ? State::Failed : State::Stopped;
             if (unexpectedlyExited) error = QStringLiteral("Managed core exited before requested stop");
             return !unexpectedlyExited;

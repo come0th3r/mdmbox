@@ -167,6 +167,23 @@ or listeners. Unconfirmed kill disables temporary-home auto-removal, preserving
 files rather than deleting an active core's directory. That rare failure path,
 destructor/process-tree/crash fault injection and non-Windows smoke are NOT RUN.
 
+### Authenticated controller readiness
+
+`waitReady(1..30000 ms)` probes only the stored loopback controller with the
+stored token, NoProxy and no redirects. Each attempt has at most 500 ms, body
+is bounded to 4096 bytes, and success requires HTTP 200, valid JSON and exact
+version `v1.19.32` while the owned child is alive. Ready is controller readiness,
+NOT a VPN connection. Bad timeout leaves the owned child untouched; failed
+probes force cleanup and report Failed. Use on one worker, without reentrancy.
+
+Windows ordinary build/base CTest 1/1 and two runtime runs PASS: initial and
+repeat readiness, invalid timeout preserves PID/state, stopped readiness refused,
+foreign API listener returning 401 refused with owned child cleaned up. Prior
+HTTP/auth/graceful/forced-cleanup tests remain passing. The foreign-listener
+case can also observe an early child exit on bind conflict; it does not prove
+every HTTP parser rejection branch. Oversize/malformed/wrong-version/redirect,
+slow-stream and actual core wrong-token fault injection remain NOT RUN.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under
