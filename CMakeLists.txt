@@ -250,6 +250,7 @@ if (NOT NKR_NO_YAML)
             sub/ManagedProfile.cpp
             sub/ManagedRuntimePolicy.cpp
             sub/ManagedCoreProcess.cpp
+            sub/ManagedControllerProbe.cpp
             sub/ManagedProfileStore.cpp
             sub/MihomoValidator.cpp
             sub/SubscriptionContract.cpp

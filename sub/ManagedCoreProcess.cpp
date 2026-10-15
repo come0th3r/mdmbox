@@ -1,14 +1,10 @@
 #include "ManagedCoreProcess.hpp"
 #include "ManagedRuntimePolicy.hpp"
 #include "MihomoValidator.hpp"
+#include "ManagedControllerProbe.hpp"
 #include <QProcessEnvironment>
 #include <QElapsedTimer>
 #include <QEventLoop>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QNetworkAccessManager>
-#include <QNetworkProxy>
-#include <QNetworkReply>
 #include <QTimer>
 #include <algorithm>
 #ifdef Q_OS_WIN
@@ -101,39 +97,14 @@ namespace NekoGui_sub {
             return false;
         }
         current = State::Running;
-        QNetworkAccessManager manager;
-        manager.setProxy(QNetworkProxy::NoProxy);
         QElapsedTimer deadline;
         deadline.start();
         bool refused = false;
         while (deadline.elapsed() < timeoutMs && process.state() != QProcess::NotRunning && !refused) {
-            QNetworkRequest request(QUrl(QStringLiteral("http://127.0.0.1:%1/version").arg(controllerPort)));
-            request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
-            request.setRawHeader("Authorization", "Bearer " + controllerToken);
-            auto *reply = manager.get(request);
-            reply->setReadBufferSize(4096);
-            QEventLoop loop;
-            QTimer timeout;
-            timeout.setSingleShot(true);
-            QByteArray body;
-            bool oversized = false;
-            const auto collect = [&] {
-                if (!reply->isOpen()) return;
-                body += reply->read(4097 - body.size());
-                if (body.size() > 4096) { oversized = true; reply->abort(); }
-            };
-            QObject::connect(reply, &QNetworkReply::readyRead, &loop, collect);
-            QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-            QObject::connect(&timeout, &QTimer::timeout, reply, &QNetworkReply::abort);
-            timeout.start((std::max)(1, (std::min)(500, timeoutMs - static_cast<int>(deadline.elapsed()))));
-            if (!reply->isFinished()) loop.exec();
-            collect();
-            const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-            const bool accepted = !oversized && reply->error() == QNetworkReply::NoError && status == 200 &&
-                QJsonDocument::fromJson(body).object().value(QStringLiteral("version")).toString() == QStringLiteral("v1.19.32");
-            refused = oversized || status != 0;
-            delete reply;
-            if (accepted && process.state() != QProcess::NotRunning) {
+            const auto result = ManagedControllerProbe::version(controllerPort, controllerToken,
+                (std::max)(1, (std::min)(500, timeoutMs - static_cast<int>(deadline.elapsed()))));
+            refused = result == ManagedControllerProbe::Result::Rejected;
+            if (result == ManagedControllerProbe::Result::Accepted && process.state() != QProcess::NotRunning) {
                 current = State::Ready;
                 return true;
             }

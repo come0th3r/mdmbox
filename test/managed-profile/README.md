@@ -194,6 +194,17 @@ handle. Both cases require API/mixed ports closed. Windows build, base CTest
 1/1 and two full smoke runs PASS. This tests child crash simulation and ordinary
 C++ destructor cleanup, NOT parent-process crash/power loss or descendant trees.
 
+### Independent controller fixtures (ordinary CTest)
+
+`controller-probe` exercises the same `ManagedControllerProbe` used by the
+process owner, without starting mihomo or depending on bind-conflict timing.
+Synthetic loopback server checks exact GET path/Bearer header. Accepted version,
+wrong version, malformed JSON, array root, 401, >4096-byte body, redirect without
+following, stalled response timeout and invalid-token/timeout preflight pass.
+Windows ordinary client build PASS, CTest 2/2 PASS, real full runtime PASS exit 0.
+Header allocation bounds, slow streaming, truncated/chunked responses and actual
+core wrong-token injection remain NOT RUN. No OS trust/proxy changes are made.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

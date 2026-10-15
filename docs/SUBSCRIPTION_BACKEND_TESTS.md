@@ -423,3 +423,19 @@ Windows smoke build **PASS**, base CTest **1/1 PASS**, full runtime **2/2 PASS**
 exit 0, including prior HTTP/auth/readiness/graceful/forced-cleanup checks.
 This does not cover parent-process crash, power loss, descendant process trees,
 unconfirmed-kill branch, OS snapshots or clean VM. These remain **NOT RUN**.
+
+## Independent controller response fixtures — 2026-10-15
+
+Extracted one-attempt `ManagedControllerProbe` and reused it in production
+ManagedCoreProcess::waitReady. Ordinary CTest now includes synthetic loopback
+controller fixture, independent of process exit/bind-conflict timing.
+Windows ordinary Release build **PASS**, CTest **2/2 PASS**, full real-core
+runtime regression **PASS** exit 0 (HTTP/auth/readiness/stop/crash/destructor).
+
+Fixture verifies exact GET /version and Bearer header across eight requests:
+valid pinned version accepted; wrong version, invalid JSON, array root, 401,
+oversized body and 302 refused; redirect never followed; stalled request returns
+Retry under deadline; invalid token/header injection and zero timeout rejected
+without requests. One-request timeout max 500 ms/body max 4096 bytes.
+Header allocation bounds, slow-stream/truncated/chunked and actual-core wrong
+token injection remain **NOT RUN**. Production stop adapter/ownership/UI pending.
