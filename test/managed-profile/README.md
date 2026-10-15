@@ -666,6 +666,30 @@ rollback remains a release blocker requiring exact prior snapshot/metadata/
 launch-options retention and expiry policy. Forced/unconfirmed Stop injection
 and deterministic expiry-during-validator fixtures remain NOT RUN.
 
+### Bounded last-working runtime restore
+
+The previous terminal post-Stop failure policy is superseded by one bounded
+restore attempt. Successful Ready retains the exact in-memory profile,
+metadata, executable, group, ports and timeout. Reconnect captures this before
+Stop. If replacement fails, restore is allowed only with PID0, ownershipNone
+and nonexpired/nonexhausted captured old AND candidate metadata. It launches
+the prior profile/options with a new token and authenticated readiness.
+Reconnect still returns false when restored: the candidate was NOT applied.
+ManagedSession exposes typed ReconnectOutcome, and the controller has a
+separate reconnectFinished(int) signal. No UI/bridge reconnect is exposed.
+The candidate store is never overwritten by runtime restore.
+
+Production/fixture builds PASS, full real-mihomo smoke PASS exit0/forced0:
+MANAGED_RECONNECT_PREFLIGHT_AND_BOUNDED_RESTORE_PASS. The occupied new API port
+causes replacement failure; restoration reaches Ready on the old API port
+with advanced ownership generation, false/Restored outcome and unchanged
+candidate bytes, then graceful Stop succeeds. Bridge E2E, CTest6/6,
+parser39/39 and process fixtures PASS. Double failure, expired-old refusal,
+uncertain cleanup refusal, controller outcome delivery and exact prior routing
+data-path verification remain NOT RUN. Captured metadata cannot establish
+server revocation/current concurrent updates; this is not a completed
+refresh transaction or release gate.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

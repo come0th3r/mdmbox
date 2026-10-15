@@ -3,6 +3,7 @@
 #include <QRandomGenerator>
 #include "ManagedRuntimePolicy.hpp"
 #include "MihomoValidator.hpp"
+#include "CoreOwnership.hpp"
 
 namespace NekoGui_sub {
     bool ManagedSession::start(const ManagedProfileStore &store, int groupId, const QString &executable,
@@ -23,7 +24,9 @@ namespace NekoGui_sub {
             error = QStringLiteral("Managed subscription is expired or exhausted");
             return false;
         }
-        return startProfile(profile, groupId, executable, mixedPort, apiPort, readinessTimeoutMs, error);
+        if (!startProfile(profile, groupId, executable, mixedPort, apiPort, readinessTimeoutMs, error)) return false;
+        working = WorkingSnapshot{profile, metadata, executable, groupId, mixedPort, apiPort, readinessTimeoutMs};
+        return true;
     }
 
     bool ManagedSession::startProfile(const ManagedProfile &profile, int groupId, const QString &executable,
@@ -44,6 +47,7 @@ namespace NekoGui_sub {
     bool ManagedSession::reconnect(const ManagedProfileStore &store, int groupId, const QString &executable,
                                    int mixedPort, int apiPort, int readinessTimeoutMs, QString &error) {
         error.clear();
+        lastReconnect = ReconnectOutcome::Rejected;
         if (activeGroup != groupId || groupId < 0 || runtime.state() != ManagedCoreProcess::State::Ready ||
             runtime.processId() == 0) {
             error = QStringLiteral("Reconnect requires the same active ready managed group");
@@ -71,14 +75,38 @@ namespace NekoGui_sub {
             error = QStringLiteral("Managed subscription expired during reconnect preflight");
             return false;
         }
+        const auto previous = working; // Retain exact last-Ready bytes, not latest store.
         if (!stop(error)) return false; // Forced/unconfirmed Stop must not restart.
-        // No automatic rollback/retry if replacement launch/readiness fails.
-        return startProfile(candidate, groupId, executable, mixedPort, apiPort, readinessTimeoutMs, error);
+        lastReconnect = ReconnectOutcome::Stopped;
+        if (startProfile(candidate, groupId, executable, mixedPort, apiPort, readinessTimeoutMs, error)) {
+            working = WorkingSnapshot{candidate, metadata, executable, groupId, mixedPort, apiPort, readinessTimeoutMs};
+            lastReconnect = ReconnectOutcome::Applied;
+            return true;
+        }
+        // At most one restore attempt, never while cleanup/ownership is uncertain.
+        // Both old and freshly captured subscription constraints must allow use.
+        const auto now = QDateTime::currentSecsSinceEpoch();
+        if (!previous || runtime.processId() != 0 ||
+            CoreOwnership::shared().owner() != CoreOwnership::Owner::None ||
+            metadata.expired(now) || metadata.exhausted() ||
+            previous->metadata.expired(now) || previous->metadata.exhausted()) return false;
+        QString restoreError;
+        if (startProfile(previous->profile, previous->groupId, previous->executable,
+                         previous->mixedPort, previous->apiPort, previous->timeoutMs, restoreError)) {
+            working = previous;
+            lastReconnect = ReconnectOutcome::Restored;
+            error = QStringLiteral("Replacement failed; previous managed session restored");
+        } else {
+            lastReconnect = ReconnectOutcome::RestoreFailed;
+            error = QStringLiteral("Replacement and previous managed session restore failed");
+        }
+        return false; // Restored does NOT mean candidate applied successfully.
     }
 
     bool ManagedSession::stop(QString &error) {
         const bool graceful = runtime.stop(error);
         if (runtime.processId() == 0) activeGroup = -1;
+        if (runtime.processId() == 0) working.reset();
         return graceful;
     }
 }

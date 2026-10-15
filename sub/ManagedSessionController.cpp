@@ -110,10 +110,14 @@ namespace NekoGui_sub {
             QString error;
             const bool success = session->reconnect(ManagedProfileStore(directory), groupId, executable,
                                                     mixedPort, apiPort, timeoutMs, error);
+            const auto outcome = session->reconnectOutcome();
             executing = false;
             // A preflight refusal may leave the old Ready session active.
             if (session->groupId() >= 0) monitor->start();
             publish(success, error);
+            QMetaObject::invokeMethod(this, [this, outcome] {
+                emit reconnectFinished(static_cast<int>(outcome));
+            }, Qt::QueuedConnection);
         }, Qt::QueuedConnection);
         return true;
     }

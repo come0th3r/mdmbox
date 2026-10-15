@@ -29,6 +29,7 @@ namespace NekoGui_sub {
         void statusChanged(int state, int groupId, qint64 processId);
         void operationFinished(bool success, const QString &error);
         void runtimeFailed(const QString &error);
+        void reconnectFinished(int outcome); // ManagedSession::ReconnectOutcome.
     private:
         QThread workerThread;
         QObject *worker;

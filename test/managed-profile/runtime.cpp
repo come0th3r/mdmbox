@@ -267,15 +267,24 @@ int main(int argc, char **argv) {
     // endpoint to force a real post-Stop launch/readiness failure, no VPN traffic.
     QTcpServer occupiedApi;
     if (!occupiedApi.listen(QHostAddress::LocalHost, 0)) return 77;
+    const QByteArray failedCandidate = source + "# candidate must remain stored after runtime rollback\n";
+    if (!store.commit(71, failedCandidate, validate, error)) return 81;
     if (session.reconnect(store, 71, executable, mixedPort, occupiedApi.serverPort(), 500, error) ||
-        error.isEmpty() || session.processId() != 0 || session.groupId() != -1 ||
-        session.state() != NekoGui_sub::ManagedCoreProcess::State::Failed ||
-        ownership.owner() != Ownership::Owner::None || !portsClosed()) return 78;
-    if (!occupiedApi.isListening() || !store.load(71, saved, error) || saved.source != source) return 79;
+        error.isEmpty() || session.processId() == 0 || session.groupId() != 71 ||
+        session.state() != NekoGui_sub::ManagedCoreProcess::State::Ready ||
+        session.reconnectOutcome() != NekoGui_sub::ManagedSession::ReconnectOutcome::Restored ||
+        ownership.owner() != Ownership::Owner::Managed ||
+        ownership.generation(Ownership::Owner::Managed) <= retainedGeneration) return 78;
+    if (!occupiedApi.isListening() || !store.load(71, saved, error) || saved.source != failedCandidate) return 79;
     occupiedApi.close();
-    // Failure is terminal for reconnect; only an explicit new Start recovers.
-    if (!session.start(store, 71, executable, mixedPort, apiPort, 10000, error) || !session.stop(error)) return 80;
-    QTextStream(stdout) << "MANAGED_RECONNECT_EXECUTABLE_PREFLIGHT_AND_POST_STOP_FAILURE_PASS\n";
+    // Restored is running on the previous API port, not the failed candidate's.
+    QTcpSocket restoredApi;
+    restoredApi.connectToHost(QHostAddress::LocalHost, apiPort);
+    if (!restoredApi.waitForConnected(1000)) return 82;
+    restoredApi.abort();
+    if (!session.stop(error) || !portsClosed()) return 80;
+    if (!store.commit(71, source, validate, error)) return 83;
+    QTextStream(stdout) << "MANAGED_RECONNECT_PREFLIGHT_AND_BOUNDED_RESTORE_PASS\n";
     QTextStream(stdout) << "MANAGED_SNAPSHOT_SESSION_READINESS_STOP_PASS\n";
     {
         NekoGui_sub::ManagedSessionController controller;
