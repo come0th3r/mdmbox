@@ -252,6 +252,24 @@ Windows ordinary build PASS, CTest 4/4 PASS, full runtime PASS exit 0 including
 recovery and external-child exit confirmation remain NOT RUN. This arbitration
 is process-local, not an interprocess lock or OS resource ownership guarantee.
 
+### Uncertain ownership outcomes
+
+`CoreOwnership::State` distinguishes Free, Held and Uncertain. Only the active
+owner can mark uncertainty; repeated notifications are idempotent. Uncertain
+retains the owner and rejects acquisition by either runtime. `release` still
+requires the caller to independently confirm shutdown; it does not inspect
+processes. Legacy failed Start/Stop and crash paths mark Uncertain, as does a
+managed cleanup whose child termination is unconfirmed. No automatic recovery
+is added by this change.
+
+Windows production build PASS, CTest 4/4 PASS, parser regression 39/39 PASS,
+full real-mihomo runtime PASS exit 0 (graceful stop, forced=0).
+`CORE_UNCERTAIN_OUTCOME_TRANSITIONS_PASS` covers both owners, invalid fault
+notifications, retained ownership, blocked acquisition and simulated confirmed
+shutdown. Actual GUI/RPC fault injection and external-process shutdown
+confirmation remain NOT RUN; these component tests do not establish safe
+automatic legacy recovery.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

@@ -408,6 +408,8 @@ void MainWindow::neko_start(int _id) {
         // do start
         MW_show_log(">>>>>>>> " + tr("Starting profile %1").arg(ent->bean->DisplayTypeAndName()));
         if (!neko_start_stage2()) {
+            QString ignored;
+            core_ownership.markUncertain(NekoGui_sub::CoreOwnership::Owner::Legacy, ignored);
             MW_show_log("<<<<<<<< " + tr("Failed to start profile %1").arg(ent->bean->DisplayTypeAndName()));
             // Start failures are deliberately conservative: RPC failure may
             // leave the old core alive, so ownership stays held until restart.
@@ -429,6 +431,10 @@ void MainWindow::neko_start(int _id) {
 }
 
 void MainWindow::neko_stop(bool crash, bool sem) {
+    if (crash) {
+        QString ignored;
+        core_ownership.markUncertain(NekoGui_sub::CoreOwnership::Owner::Legacy, ignored);
+    }
     auto id = NekoGui::dataStore->started_id;
     if (id < 0) {
         if (sem) sem_stopped.release();
@@ -461,6 +467,10 @@ void MainWindow::neko_stop(bool crash, bool sem) {
         if (!crash) {
             bool rpcOK;
             QString error = defaultClient->Stop(&rpcOK);
+            if (!rpcOK || !error.isEmpty()) {
+                QString ignored;
+                core_ownership.markUncertain(NekoGui_sub::CoreOwnership::Owner::Legacy, ignored);
+            }
             if (rpcOK && !error.isEmpty()) {
                 runOnUiThread([=] { MessageBoxWarning("Stop return error", error); });
                 return false;

@@ -23,6 +23,25 @@ int main(int argc, char **argv) {
     if (acquired != 1 || ownership.owner() == Ownership::Owner::None) return 8;
     const auto held = ownership.owner();
     if (!ownership.release(held, error) || ownership.owner() != Ownership::Owner::None) return 9;
+    for (const auto owner : {Ownership::Owner::Legacy, Ownership::Owner::Managed}) {
+        const auto other = owner == Ownership::Owner::Legacy ? Ownership::Owner::Managed : Ownership::Owner::Legacy;
+        if (ownership.state() != Ownership::State::Free || !ownership.acquire(owner, error) ||
+            ownership.state() != Ownership::State::Held) return 10;
+        if (ownership.markUncertain(other, error) || error.isEmpty() ||
+            ownership.markUncertain(Ownership::Owner::None, error) ||
+            ownership.state() != Ownership::State::Held) return 11;
+        if (!ownership.markUncertain(owner, error) || !ownership.markUncertain(owner, error) ||
+            ownership.state() != Ownership::State::Uncertain || ownership.owner() != owner) return 12;
+        // A fault notification is not permission to run either runtime again.
+        if (ownership.acquire(other, error) || error.isEmpty() || ownership.acquire(owner, error) ||
+            ownership.release(other, error) || ownership.state() != Ownership::State::Uncertain) return 13;
+        // Simulate a later independently confirmed shutdown by the same owner.
+        if (!ownership.release(owner, error) || ownership.state() != Ownership::State::Free ||
+            !ownership.acquire(other, error) || !ownership.release(other, error)) return 14;
+    }
+    if (ownership.markUncertain(Ownership::Owner::Legacy, error) || error.isEmpty() ||
+        ownership.state() != Ownership::State::Free) return 15;
+    QTextStream(stdout) << "CORE_UNCERTAIN_OUTCOME_TRANSITIONS_PASS\n";
     QTextStream(stdout) << "CORE_SINGLE_OWNER_ARBITRATION_PASS\n";
     return 0;
 }

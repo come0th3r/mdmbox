@@ -21,6 +21,8 @@ namespace NekoGui_sub {
         if (process.state() != QProcess::NotRunning) {
             process.kill();
             if (!process.waitForFinished(3000)) {
+                QString ignored;
+                if (ownsRuntime) CoreOwnership::shared().markUncertain(CoreOwnership::Owner::Managed, ignored);
                 if (home) home->setAutoRemove(false);
                 return false;
             }
