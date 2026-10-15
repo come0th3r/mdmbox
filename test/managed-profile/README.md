@@ -843,6 +843,31 @@ transaction, persistent last-working restore or automatic scheduler is claimed.
 Combined HTTPS→runtime apply, concurrent writers, expiry during validation,
 metadata rollback and actual endpoint transition remain NOT RUN.
 
+### Exact committed candidate capture
+
+SubscriptionService::refresh optionally returns CommittedSnapshot containing
+the exact validated profile and downloaded metadata only after commit succeeds.
+Failures leave the output unchanged. No post-commit disk reload is used.
+ManagedSession refresh/apply now passes that captured pair to its private
+reconnectSnapshot path; ordinary explicit reconnect still loads one envelope.
+Both paths share preflight, expiry recheck, Stop and bounded restore logic.
+
+The earlier reload race is removed: a later writer cannot substitute another
+candidate in this operation. A deterministic component interleaving replaces
+both stored source and metadata after refresh, checks newer disk contents and
+unchanged captured output, then checks output preservation across expired,
+validator, cancellation and lock failures.
+SUBSCRIPTION_COMMITTED_SNAPSHOT_CAPTURE_PRESERVATION_PASS.
+Windows ordinary/fixture builds, CTest6/6, full real-mihomo runtime,
+production bridge E2E and parser39/39/process fixtures PASS.
+
+This is captured-candidate semantics, NOT latest-write-wins or a disk/runtime
+transaction: disk may contain a newer generation while this operation applies
+its captured one. Concurrent revocation/newer metadata is not observed by this
+attempt. Threaded mutation at the exact commit/apply boundary, combined HTTPS
+apply and controller/UI refresh commands remain NOT RUN. Automatic refresh is
+still disabled.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

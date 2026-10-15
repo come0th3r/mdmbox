@@ -7,12 +7,17 @@
 namespace NekoGui_sub {
     class SubscriptionService {
     public:
+        struct CommittedSnapshot {
+            ManagedProfile profile;
+            SubscriptionMetadata metadata;
+        };
         using Fetcher = std::function<bool(const ManagedSubscriptionRequest &, const QString &,
                                           SubscriptionDownload &, QString &, const std::atomic_bool *)>;
         // Injected transport/validator permit deterministic tests; production binds pinned adapters.
         static bool refresh(int groupId, const QUrl &url, const QString &appVersion,
                             const QString &identityDirectory, ManagedProfileStore &store,
                             const Fetcher &fetch, const ManagedProfileStore::Validator &validate,
-                            QString &error, const std::atomic_bool *cancel = nullptr);
+                            QString &error, const std::atomic_bool *cancel = nullptr,
+                            CommittedSnapshot *committed = nullptr);
     };
 }

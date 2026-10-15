@@ -43,6 +43,9 @@ namespace NekoGui_sub {
         std::optional<WorkingSnapshot> working;
         ReconnectOutcome lastReconnect = ReconnectOutcome::None;
         bool startProfile(const ManagedProfile &profile, int groupId, const QString &executable,
-                          int mixedPort, int apiPort, int readinessTimeoutMs, QString &error);
+                           int mixedPort, int apiPort, int readinessTimeoutMs, QString &error);
+        bool reconnectSnapshot(const ManagedProfile &candidate, const SubscriptionMetadata &metadata,
+                               int groupId, const QString &executable, int mixedPort, int apiPort,
+                               int readinessTimeoutMs, QString &error);
     };
 }

@@ -60,6 +60,19 @@ namespace NekoGui_sub {
         ManagedProfile candidate;
         SubscriptionMetadata metadata;
         if (!store.loadSnapshot(groupId, candidate, metadata, error)) return false;
+        return reconnectSnapshot(candidate, metadata, groupId, executable, mixedPort, apiPort, readinessTimeoutMs, error);
+    }
+
+    bool ManagedSession::reconnectSnapshot(const ManagedProfile &candidate, const SubscriptionMetadata &metadata,
+                                           int groupId, const QString &executable, int mixedPort, int apiPort,
+                                           int readinessTimeoutMs, QString &error) {
+        error.clear();
+        lastReconnect = ReconnectOutcome::Rejected;
+        if (activeGroup != groupId || groupId < 0 || runtime.state() != ManagedCoreProcess::State::Ready ||
+            runtime.processId() == 0 || readinessTimeoutMs < 1 || readinessTimeoutMs > 30000) {
+            error = QStringLiteral("Reconnect requires the same ready group and a valid readiness timeout");
+            return false;
+        }
         if (metadata.expired(QDateTime::currentSecsSinceEpoch()) || metadata.exhausted()) {
             error = QStringLiteral("Managed subscription is expired or exhausted");
             return false;
@@ -132,8 +145,11 @@ namespace NekoGui_sub {
             return ManagedRuntimePolicy::projectLoopback(profile, mixedPort, apiPort, QByteArray(64, 'a'), projected, reason) &&
                    MihomoValidator::validate(executable, projected, reason);
         };
-        if (!SubscriptionService::refresh(groupId, url, appVersion, identityDirectory, store, fetch, validate, error))
+        SubscriptionService::CommittedSnapshot committed;
+        if (!SubscriptionService::refresh(groupId, url, appVersion, identityDirectory, store, fetch, validate, error,
+                                          nullptr, &committed))
             return false;
-        return reconnect(store, groupId, executable, mixedPort, apiPort, readinessTimeoutMs, error);
+        return reconnectSnapshot(committed.profile, committed.metadata, groupId, executable,
+                                 mixedPort, apiPort, readinessTimeoutMs, error);
     }
 }

@@ -246,12 +246,24 @@ int main(int argc, char **argv) {
         d.metadata = serviceMetadata;
         return true;
     };
+    NekoGui_sub::SubscriptionService::CommittedSnapshot committed;
     const auto refresh = [&](const NekoGui_sub::ManagedProfileStore::Validator &v,
                              const std::atomic_bool *cancel = nullptr) {
         return NekoGui_sub::SubscriptionService::refresh(10, QUrl("https://example.invalid/token"), "0.1.0",
-            copiedDirectory, store, fetch, v, error, cancel);
+            copiedDirectory, store, fetch, v, error, cancel, &committed);
     };
     if (!refresh(accept)) return 33;
+    if (committed.profile.source != source || committed.profile.sha256.isEmpty() ||
+        committed.metadata.title != serviceMetadata.title || committed.metadata.upload != serviceMetadata.upload) return 101;
+    // Deterministic interleaving: a later writer changes source AND metadata.
+    // The caller's committed candidate must remain the exact earlier version.
+    auto newerMetadata = serviceMetadata;
+    newerMetadata.title = "Later writer";
+    if (!store.commit(10, updated, newerMetadata, accept, error) ||
+        committed.profile.source != source || committed.metadata.title != serviceMetadata.title ||
+        !store.loadSnapshot(10, profile, newerMetadata, error) || profile.source != updated ||
+        newerMetadata.title != "Later writer") return 102;
+    if (!refresh(accept)) return 103;
     const auto servicePath = QDir(directory.path()).filePath("10.json");
     const auto serviceBytes = readBytes(servicePath);
     NekoGui_sub::SubscriptionMetadata loadedMetadata;
@@ -271,6 +283,9 @@ int main(int argc, char **argv) {
         QLockFile lock(QDir(copiedDirectory).filePath("subscription-refresh-10.lock"));
         if (!lock.tryLock() || refresh(accept) || readBytes(servicePath) != serviceBytes) return 38;
     }
+    if (committed.profile.source != source || committed.metadata.title != serviceMetadata.title ||
+        committed.metadata.expiry || committed.metadata.upload != serviceMetadata.upload) return 104;
+    QTextStream(stdout) << "SUBSCRIPTION_COMMITTED_SNAPSHOT_CAPTURE_PRESERVATION_PASS\n";
     QTextStream(stdout) << "SUBSCRIPTION_SERVICE_REFRESH_PASS\n";
     if (!store.loadSnapshot(10, profile, loadedMetadata, error) || profile.source != source ||
         loadedMetadata.title != serviceMetadata.title) return 41;
