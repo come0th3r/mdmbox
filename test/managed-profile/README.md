@@ -742,6 +742,32 @@ kill/reap and retained Uncertain ownership are NOT RUN, not covered by a
 refused signal followed by confirmed cleanup. Controller StopFailed delivery
 and unified request-correlated reconnect completion remain NOT RUN.
 
+### Unified correlated reconnect completion
+
+Controller reconnect accepts an optional requestId (maximum 128 UTF-16 code
+units; empty remains valid for existing internal callers). Accepted operations
+emit reconnectCompleted(requestId, success, outcome, error, snapshot) once.
+Busy/oversized-ID refusal returns false and emits no completion. IDs are
+correlation labels, not deduplication keys or persistent operation history.
+
+Completion uses one owner-thread callback: update cached state, capture a
+read-only snapshot with busy=false, then emit statusChanged,
+reconnectCompleted, compatibility reconnectFinished and operationFinished.
+The previous two independently queued completion callbacks are removed;
+compatibility reconnectFinished now precedes operationFinished. The captured
+snapshot cannot be changed by a subsequent operation. Consumers should use
+the unified signal, not combine separate compatibility notifications.
+
+Windows ordinary/fixture builds and full real-mihomo runtime PASS:
+MANAGED_RECONNECT_CORRELATED_IMMUTABLE_COMPLETION_PASS. Fixtures verify IDs,
+one completion per accepted operation, success/error/outcome/snapshot agreement
+for Rejected/Applied/Restored/RestoreFailed, busy refusal and oversized IDs,
+and retained Failed completion snapshot after explicit Start recovery.
+CTest6/6, production bridge/hook/reload/crash E2E, parser39/39 and process
+fixtures PASS. Bridge reconnect is not exposed. Controller StopFailed,
+reentrant signal-handler command submission, requestId reuse/replay and
+unconfirmed cleanup remain NOT RUN. Ready still means loopback API only.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

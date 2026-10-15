@@ -43,16 +43,23 @@ namespace NekoGui_sub {
         workerThread.wait();
     }
 
-    void ManagedSessionController::publish(bool success, const QString &error) {
+    void ManagedSessionController::publish(bool success, const QString &error,
+                                          ManagedSession::ReconnectOutcome outcome, const QString &requestId) {
         const auto state = session->state();
         const auto group = session->groupId();
         const auto pid = session->processId();
-        QMetaObject::invokeMethod(this, [this, state, group, pid, success, error] {
+        QMetaObject::invokeMethod(this, [this, state, group, pid, success, error, outcome, requestId] {
             pending = false;
             lastState = static_cast<int>(state);
             lastGroup = group;
             lastPid = pid;
+            // Capture before any direct-connected observer can submit another command.
+            const auto completedSnapshot = snapshot();
             emit statusChanged(lastState, group, pid);
+            if (outcome != ManagedSession::ReconnectOutcome::None) {
+                emit reconnectCompleted(requestId, success, static_cast<int>(outcome), error, completedSnapshot);
+                emit reconnectFinished(static_cast<int>(outcome));
+            }
             emit operationFinished(success, error);
         }, Qt::QueuedConnection);
     }
@@ -101,8 +108,8 @@ namespace NekoGui_sub {
     }
 
     bool ManagedSessionController::reconnect(const QString &directory, int groupId, const QString &executable,
-                                            int mixedPort, int apiPort, int timeoutMs) {
-        if (pending) return false;
+                                            int mixedPort, int apiPort, int timeoutMs, const QString &requestId) {
+        if (pending || requestId.size() > 128) return false;
         pending = true;
         QMetaObject::invokeMethod(worker, [=] {
             ensureSession();
@@ -114,10 +121,7 @@ namespace NekoGui_sub {
             executing = false;
             // A preflight refusal may leave the old Ready session active.
             if (session->groupId() >= 0) monitor->start();
-            publish(success, error);
-            QMetaObject::invokeMethod(this, [this, outcome] {
-                emit reconnectFinished(static_cast<int>(outcome));
-            }, Qt::QueuedConnection);
+            publish(success, error, outcome, requestId);
         }, Qt::QueuedConnection);
         return true;
     }

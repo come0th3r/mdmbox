@@ -352,6 +352,12 @@ int main(int argc, char **argv) {
         bool completed = false, succeeded = false;
         bool reconnectOutcomeReceived = false;
         int reconnectOutcome = -1;
+        int reconnectCompletions = 0;
+        QString completedRequestId;
+        bool correlatedSuccess = false;
+        int correlatedOutcome = -1;
+        QString correlatedError;
+        QJsonObject correlatedSnapshot;
         int status = -1, group = -1;
         qint64 pid = 0;
         QObject::connect(&controller, &NekoGui_sub::ManagedSessionController::statusChanged,
@@ -360,6 +366,15 @@ int main(int argc, char **argv) {
             &app, [&](bool ok, const QString &) { completed = true; succeeded = ok; });
         QObject::connect(&controller, &NekoGui_sub::ManagedSessionController::reconnectFinished,
             &app, [&](int outcome) { reconnectOutcomeReceived = true; reconnectOutcome = outcome; });
+        QObject::connect(&controller, &NekoGui_sub::ManagedSessionController::reconnectCompleted,
+            &app, [&](const QString &requestId, bool ok, int outcome, const QString &message, const QJsonObject &snapshot) {
+                ++reconnectCompletions;
+                completedRequestId = requestId;
+                correlatedSuccess = ok;
+                correlatedOutcome = outcome;
+                correlatedError = message;
+                correlatedSnapshot = snapshot;
+            });
         auto await = [&] {
             QElapsedTimer timer;
             timer.start();
@@ -393,8 +408,11 @@ int main(int argc, char **argv) {
         reconnectOutcomeReceived = false;
         const auto beforeReconnect = pid;
         const auto beforeReconnectGeneration = ownership.generation(Ownership::Owner::Managed);
-        if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, apiPort, 0) ||
+        if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, apiPort, 0, "reject-timeout") ||
             !await() || succeeded || !awaitReconnectOutcome() ||
+            reconnectCompletions != 1 || completedRequestId != "reject-timeout" ||
+            correlatedSuccess || correlatedError.isEmpty() || correlatedOutcome != reconnectOutcome ||
+            correlatedSnapshot != controller.snapshot() ||
             reconnectOutcome != static_cast<int>(NekoGui_sub::ManagedSession::ReconnectOutcome::Rejected) ||
             pid != beforeReconnect ||
             !controller.snapshot().value("controllerReady").toBool()) return 65;
@@ -426,8 +444,16 @@ int main(int argc, char **argv) {
         if (!store.commit(71, replacementSource, validate, error)) return 71;
         completed = false;
         reconnectOutcomeReceived = false;
-        if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, apiPort, 10000) ||
-            !controller.busy() || controller.stop() || !await() || !succeeded || !awaitReconnectOutcome() ||
+        const auto beforeAppliedCompletions = reconnectCompletions;
+        if (controller.reconnect(snapshots.path(), 71, executable, mixedPort, apiPort, 10000, QString(129, 'x')) ||
+            controller.busy() || reconnectCompletions != beforeAppliedCompletions) return 100;
+        if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, apiPort, 10000, "apply-profile") ||
+            !controller.busy() || controller.stop() ||
+            controller.reconnect(snapshots.path(), 71, executable, mixedPort, apiPort, 0, "busy-refused") ||
+            !await() || !succeeded || !awaitReconnectOutcome() ||
+            reconnectCompletions != beforeAppliedCompletions + 1 || completedRequestId != "apply-profile" ||
+            !correlatedSuccess || !correlatedError.isEmpty() || correlatedOutcome != reconnectOutcome ||
+            correlatedSnapshot != controller.snapshot() ||
             reconnectOutcome != static_cast<int>(NekoGui_sub::ManagedSession::ReconnectOutcome::Applied) ||
             pid == 0 ||
             group != 71 || !controller.snapshot().value("controllerReady").toBool() ||
@@ -438,8 +464,12 @@ int main(int argc, char **argv) {
         const auto beforeRestoreGeneration = ownership.generation(Ownership::Owner::Managed);
         completed = false;
         reconnectOutcomeReceived = false;
-        if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, occupiedApi.serverPort(), 500) ||
+        const auto beforeRestoredCompletions = reconnectCompletions;
+        if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, occupiedApi.serverPort(), 500, "restore-profile") ||
             !controller.busy() || controller.stop() || !await() || succeeded || !awaitReconnectOutcome() ||
+            reconnectCompletions != beforeRestoredCompletions + 1 || completedRequestId != "restore-profile" ||
+            correlatedSuccess || correlatedError.isEmpty() || correlatedOutcome != reconnectOutcome ||
+            correlatedSnapshot != controller.snapshot() ||
             reconnectOutcome != static_cast<int>(NekoGui_sub::ManagedSession::ReconnectOutcome::Restored) ||
             controller.busy() || group != 71 || pid == 0 ||
             status != static_cast<int>(NekoGui_sub::ManagedCoreProcess::State::Ready) ||
@@ -467,8 +497,12 @@ int main(int argc, char **argv) {
         claimOldApi.start();
         completed = false;
         reconnectOutcomeReceived = false;
-        if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, occupiedApi.serverPort(), 2000) ||
+        const auto beforeFailedCompletions = reconnectCompletions;
+        if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, occupiedApi.serverPort(), 2000, "restore-failed") ||
             !await() || succeeded || !awaitReconnectOutcome() ||
+            reconnectCompletions != beforeFailedCompletions + 1 || completedRequestId != "restore-failed" ||
+            correlatedSuccess || correlatedError.isEmpty() || correlatedOutcome != reconnectOutcome ||
+            correlatedSnapshot != controller.snapshot() ||
             reconnectOutcome != static_cast<int>(NekoGui_sub::ManagedSession::ReconnectOutcome::RestoreFailed) ||
             controller.busy() || group != -1 || pid != 0 ||
             status != static_cast<int>(NekoGui_sub::ManagedCoreProcess::State::Failed) ||
@@ -483,7 +517,11 @@ int main(int argc, char **argv) {
         if (!portsClosed()) return 94;
         completed = false;
         if (!controller.start(snapshots.path(), 71, executable, mixedPort, apiPort, 10000) ||
-            !await() || !succeeded || pid == 0 || group != 71) return 95;
+            !await() || !succeeded || pid == 0 || group != 71 ||
+            reconnectCompletions != beforeFailedCompletions + 1 ||
+            correlatedSnapshot.value("state").toString() != "failed" ||
+            correlatedSnapshot.value("busy").toBool()) return 95;
+        QTextStream(stdout) << "MANAGED_RECONNECT_CORRELATED_IMMUTABLE_COMPLETION_PASS\n";
         QTextStream(stdout) << "MANAGED_CONTROLLER_RESTORE_FAILED_CLEANUP_EXPLICIT_RECOVERY_PASS\n";
         if (!store.commit(71, source, validate, error)) return 74;
         QTextStream(stdout) << "MANAGED_CONTROLLED_RECONNECT_PREFLIGHT_PRESERVATION_PASS\n";

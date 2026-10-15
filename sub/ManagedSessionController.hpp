@@ -18,7 +18,7 @@ namespace NekoGui_sub {
                    int mixedPort, int apiPort, int timeoutMs);
         bool stop();
         bool reconnect(const QString &directory, int groupId, const QString &executable,
-                       int mixedPort, int apiPort, int timeoutMs);
+                       int mixedPort, int apiPort, int timeoutMs, const QString &requestId = {});
         bool busy() const { return pending; }
         int state() const { return lastState; }
         int groupId() const { return lastGroup; }
@@ -29,7 +29,11 @@ namespace NekoGui_sub {
         void statusChanged(int state, int groupId, qint64 processId);
         void operationFinished(bool success, const QString &error);
         void runtimeFailed(const QString &error);
+        // Compatibility notification, emitted before operationFinished.
         void reconnectFinished(int outcome); // ManagedSession::ReconnectOutcome.
+        // One immutable completion per accepted reconnect; busy refusals emit none.
+        void reconnectCompleted(const QString &requestId, bool success, int outcome,
+                                const QString &error, const QJsonObject &snapshot);
     private:
         QThread workerThread;
         QObject *worker;
@@ -40,7 +44,9 @@ namespace NekoGui_sub {
         int lastState = static_cast<int>(ManagedCoreProcess::State::Stopped);
         int lastGroup = -1;
         qint64 lastPid = 0;
-        void publish(bool success, const QString &error);
+        void publish(bool success, const QString &error,
+                     ManagedSession::ReconnectOutcome outcome = ManagedSession::ReconnectOutcome::None,
+                     const QString &requestId = {});
         void ensureSession();
     };
 }
