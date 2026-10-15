@@ -9,6 +9,8 @@
 Распакуйте ZIP в отдельную доступную для записи папку. Запускайте
 `Start Alpha.cmd`: данные будут в `alpha-data` рядом с программой,
 не в каталоге существующей установки. Не переносите рабочие конфиги в alpha.
+Для non-admin alpha GUI собирается с `-DMDMBOX_REQUIRE_ADMIN=OFF`;
+это не предоставляет прав для TUN или других privileged operations.
 Не запускайте EXE напрямую, если нужна эта изоляция.
 Нужен Microsoft Visual C++ Redistributable x64; если в пакете есть официальный
 `vc_redist.x64.exe`, установите его при отсутствии runtime.

@@ -351,8 +351,13 @@ target_link_libraries(${NKR_APP_TARGET} PRIVATE
         ${PLATFORM_LIBRARIES}
 )
 
+option(MDMBOX_REQUIRE_ADMIN "Require elevation at GUI startup (disable for loopback technical alpha)" ON)
 if (WIN32 AND MSVC AND NOT MDMBOX_SUBSCRIPTION_PARSER_TEST)
-    target_link_options(${NKR_APP_TARGET} PRIVATE "/MANIFESTUAC:level='requireAdministrator' uiAccess='false'")
+    if (MDMBOX_REQUIRE_ADMIN)
+        target_link_options(${NKR_APP_TARGET} PRIVATE "/MANIFESTUAC:level='requireAdministrator' uiAccess='false'")
+    else ()
+        target_link_options(${NKR_APP_TARGET} PRIVATE "/MANIFESTUAC:level='asInvoker' uiAccess='false'")
+    endif ()
 endif ()
 
 if (${QT_VERSION_MAJOR} GREATER_EQUAL 6)
