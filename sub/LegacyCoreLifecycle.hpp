@@ -8,9 +8,9 @@ namespace NekoGui_sub {
     class LegacyCoreLifecycle {
     public:
         static bool finishStop(CoreOwnership &ownership, bool rpcSucceeded,
-                               bool externalProcessesStopped, QString &error) {
+                               bool externalProcessesStopped, QString &error, quint64 generation = 0) {
             return ownership.finishStop(CoreOwnership::Owner::Legacy,
-                                        rpcSucceeded && externalProcessesStopped, error);
+                                        rpcSucceeded && externalProcessesStopped, error, generation);
         }
     };
 }

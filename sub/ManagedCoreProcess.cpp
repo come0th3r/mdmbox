@@ -22,7 +22,7 @@ namespace NekoGui_sub {
             process.kill();
             if (!process.waitForFinished(3000)) {
                 QString ignored;
-                if (ownsRuntime) CoreOwnership::shared().markUncertain(CoreOwnership::Owner::Managed, ignored);
+                if (ownsRuntime) CoreOwnership::shared().markUncertain(CoreOwnership::Owner::Managed, ignored, ownershipGeneration);
                 if (home) home->setAutoRemove(false);
                 return false;
             }
@@ -32,8 +32,9 @@ namespace NekoGui_sub {
         controllerPort = 0;
         if (ownsRuntime) {
             QString ignored;
-            CoreOwnership::shared().release(CoreOwnership::Owner::Managed, ignored);
+            if (!CoreOwnership::shared().release(CoreOwnership::Owner::Managed, ignored, ownershipGeneration)) return false;
             ownsRuntime = false;
+            ownershipGeneration = 0;
         }
         return true;
     }
@@ -57,7 +58,7 @@ namespace NekoGui_sub {
             error = QStringLiteral("Previous managed core cleanup is not confirmed");
             return false;
         }
-        if (!CoreOwnership::shared().acquire(CoreOwnership::Owner::Managed, error)) return false;
+        if (!CoreOwnership::shared().acquire(CoreOwnership::Owner::Managed, error, &ownershipGeneration)) return false;
         ownsRuntime = true;
         current = State::Starting;
         ManagedProfile projected;

@@ -101,6 +101,26 @@ int main(int argc, char **argv) {
         if (faulted && (concurrent.owner() != Ownership::Owner::Legacy || concurrent.state() != Ownership::State::Uncertain)) return 25;
     }
     QTextStream(stdout) << "CORE_ATOMIC_STOP_FAULT_RACE_PASS iterations=200\n";
+    for (const auto owner : {Ownership::Owner::Legacy, Ownership::Owner::Managed}) {
+        Ownership generations;
+        quint64 oldGeneration = 0, newGeneration = 0;
+        if (!generations.acquire(owner, error, &oldGeneration) || oldGeneration == 0 ||
+            generations.generation(owner) != oldGeneration ||
+            !generations.release(owner, error, oldGeneration) ||
+            !generations.acquire(owner, error, &newGeneration) || newGeneration <= oldGeneration) return 26;
+        if (generations.release(owner, error, oldGeneration) || error.isEmpty() ||
+            generations.markUncertain(owner, error, oldGeneration) ||
+            generations.finishStop(owner, true, error, oldGeneration) ||
+            generations.finishStop(owner, false, error, oldGeneration) ||
+            generations.state() != Ownership::State::Held || generations.generation(owner) != newGeneration) return 27;
+        if (!generations.markUncertain(owner, error, newGeneration) ||
+            generations.finishStop(owner, true, error, newGeneration) ||
+            !generations.release(owner, error, newGeneration) || generations.generation(owner) != 0) return 28;
+        quint64 rejected = 123;
+        if (!generations.acquire(owner, error, &newGeneration) ||
+            generations.acquire(owner, error, &rejected) || rejected != 0) return 29;
+    }
+    QTextStream(stdout) << "CORE_STALE_GENERATION_REFUSAL_PASS\n";
     QTextStream(stdout) << "CORE_SINGLE_OWNER_ARBITRATION_PASS\n";
     return 0;
 }

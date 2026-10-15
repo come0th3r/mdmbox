@@ -1,4 +1,5 @@
 #include "CoreOwnership.hpp"
+#include <limits>
 
 namespace NekoGui_sub {
     CoreOwnership &CoreOwnership::shared() {
@@ -6,8 +7,9 @@ namespace NekoGui_sub {
         return instance;
     }
 
-    bool CoreOwnership::acquire(Owner owner, QString &error) {
+    bool CoreOwnership::acquire(Owner owner, QString &error, quint64 *generation) {
         error.clear();
+        if (generation) *generation = 0;
         if (owner == Owner::None) { error = QStringLiteral("Cannot acquire an empty core owner"); return false; }
         QMutexLocker lock(&mutex);
         if (active != Owner::None) {
@@ -16,14 +18,24 @@ namespace NekoGui_sub {
                                     : QStringLiteral("Another core runtime already owns the network core");
             return false;
         }
+        if (serial == (std::numeric_limits<quint64>::max)()) {
+            error = QStringLiteral("Core ownership generation exhausted");
+            return false;
+        }
+        ++serial;
         active = owner;
         current = State::Held;
+        if (generation) *generation = serial;
         return true;
     }
 
-    bool CoreOwnership::markUncertain(Owner owner, QString &error) {
+    bool CoreOwnership::markUncertain(Owner owner, QString &error, quint64 generation) {
         error.clear();
         QMutexLocker lock(&mutex);
+        if (generation != 0 && generation != serial) {
+            error = QStringLiteral("Stale core ownership generation");
+            return false;
+        }
         if (owner == Owner::None || active != owner) {
             error = QStringLiteral("Only the active runtime can mark ownership uncertain");
             return false;
@@ -32,10 +44,14 @@ namespace NekoGui_sub {
         return true;
     }
 
-    bool CoreOwnership::release(Owner owner, QString &error) {
+    bool CoreOwnership::release(Owner owner, QString &error, quint64 generation) {
         error.clear();
         if (owner == Owner::None) { error = QStringLiteral("Cannot release an empty core owner"); return false; }
         QMutexLocker lock(&mutex);
+        if (generation != 0 && generation != serial) {
+            error = QStringLiteral("Stale core ownership generation");
+            return false;
+        }
         if (active != owner) {
             error = active == Owner::None ? QStringLiteral("Core ownership is not held")
                                           : QStringLiteral("Core ownership belongs to another runtime");
@@ -46,9 +62,13 @@ namespace NekoGui_sub {
         return true;
     }
 
-    bool CoreOwnership::finishStop(Owner owner, bool stopped, QString &error) {
+    bool CoreOwnership::finishStop(Owner owner, bool stopped, QString &error, quint64 generation) {
         error.clear();
         QMutexLocker lock(&mutex);
+        if (generation != 0 && generation != serial) {
+            error = QStringLiteral("Stale core ownership generation");
+            return false;
+        }
         if (owner == Owner::None || active != owner) {
             error = QStringLiteral("Stop result does not belong to the active runtime");
             return false;
@@ -61,6 +81,11 @@ namespace NekoGui_sub {
         active = Owner::None;
         current = State::Free;
         return true;
+    }
+
+    quint64 CoreOwnership::generation(Owner owner) const {
+        QMutexLocker lock(&mutex);
+        return owner != Owner::None && active == owner ? serial : 0;
     }
 
     CoreOwnership::Owner CoreOwnership::owner() const {

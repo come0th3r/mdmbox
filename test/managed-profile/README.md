@@ -357,6 +357,25 @@ Legacy/Uncertain outcomes. This is a component concurrency fixture, not actual
 GUI RPC fault injection. Generation tokens and explicit recovery remain
 unimplemented; this change alone does not make recovery safe.
 
+### Ownership generation checks
+
+Successful acquisition now increments a monotonic quint64 generation and can
+return it to the caller. Nonzero generation arguments on release, fault and
+stop-result mutations are checked under the ownership mutex. Exhaustion fails
+closed. Production managed cleanup stores its acquired generation; legacy
+start failure and Stop pass the generation captured for their operation.
+
+Windows production build PASS, CTest6/6 PASS,
+`CORE_STALE_GENERATION_REFUSAL_PASS` (both owner types, same-owner reacquisition,
+stale release/fault/successful and failed stop), race200 PASS, parser39/39 plus
+ExternalProcess4 PASS, full mihomo smoke PASS exit0/forced0.
+
+Zero/default generation remains an unversioned compatibility API for existing
+fixtures; this is not an opaque mandatory lease. Legacy crash snapshots current
+ownership and is not yet bound to the daemon process that emitted the event.
+These counters do not prove process exit, authenticate a callback or authorize
+automatic recovery. Daemon event generations and GUI/RPC fault E2E are pending.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

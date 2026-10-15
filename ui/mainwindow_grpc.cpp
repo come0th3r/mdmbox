@@ -398,7 +398,8 @@ void MainWindow::neko_start(int _id) {
             sem_stopped.acquire();
         }
         QString ownershipError;
-        if (!core_ownership.acquire(NekoGui_sub::CoreOwnership::Owner::Legacy, ownershipError)) {
+        quint64 ownershipGeneration = 0;
+        if (!core_ownership.acquire(NekoGui_sub::CoreOwnership::Owner::Legacy, ownershipError, &ownershipGeneration)) {
             MW_show_log(QStringLiteral("Legacy core ownership refused: ") + ownershipError);
             mu_starting.unlock();
             runOnUiThread([=] {
@@ -412,7 +413,7 @@ void MainWindow::neko_start(int _id) {
         MW_show_log(">>>>>>>> " + tr("Starting profile %1").arg(ent->bean->DisplayTypeAndName()));
         if (!neko_start_stage2()) {
             QString ignored;
-            core_ownership.markUncertain(NekoGui_sub::CoreOwnership::Owner::Legacy, ignored);
+            core_ownership.markUncertain(NekoGui_sub::CoreOwnership::Owner::Legacy, ignored, ownershipGeneration);
             MW_show_log("<<<<<<<< " + tr("Failed to start profile %1").arg(ent->bean->DisplayTypeAndName()));
             // Start failures are deliberately conservative: RPC failure may
             // leave the old core alive, so ownership stays held until restart.
@@ -434,9 +435,10 @@ void MainWindow::neko_start(int _id) {
 }
 
 void MainWindow::neko_stop(bool crash, bool sem) {
+    const auto ownershipGeneration = core_ownership.generation(NekoGui_sub::CoreOwnership::Owner::Legacy);
     if (crash) {
         QString ignored;
-        core_ownership.markUncertain(NekoGui_sub::CoreOwnership::Owner::Legacy, ignored);
+        if (ownershipGeneration != 0) core_ownership.markUncertain(NekoGui_sub::CoreOwnership::Owner::Legacy, ignored, ownershipGeneration);
     }
     auto id = NekoGui::dataStore->started_id;
     if (id < 0) {
@@ -445,6 +447,7 @@ void MainWindow::neko_stop(bool crash, bool sem) {
     }
 
     auto neko_stop_stage2 = [=] {
+        if (ownershipGeneration == 0) return false;
         auto externalStop = std::make_shared<NekoGui_sys::ProcessCleanupCompletion>();
         runOnUiThread(
             [=] {
@@ -472,7 +475,7 @@ void MainWindow::neko_stop(bool crash, bool sem) {
             QString error = defaultClient->Stop(&rpcOK);
             if (!rpcOK || !error.isEmpty()) {
                 QString ignored;
-                NekoGui_sub::LegacyCoreLifecycle::finishStop(core_ownership, false, externalProcessesStopped, ignored);
+                NekoGui_sub::LegacyCoreLifecycle::finishStop(core_ownership, false, externalProcessesStopped, ignored, ownershipGeneration);
             }
             if (rpcOK && !error.isEmpty()) {
                 runOnUiThread([=] { MessageBoxWarning("Stop return error", error); });
@@ -485,7 +488,7 @@ void MainWindow::neko_stop(bool crash, bool sem) {
 
         if (!crash) {
             QString ownershipError;
-            if (!NekoGui_sub::LegacyCoreLifecycle::finishStop(core_ownership, true, externalProcessesStopped, ownershipError)) {
+            if (!NekoGui_sub::LegacyCoreLifecycle::finishStop(core_ownership, true, externalProcessesStopped, ownershipError, ownershipGeneration)) {
                 MW_show_log(ownershipError);
                 return false;
             }

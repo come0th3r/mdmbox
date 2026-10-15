@@ -10,20 +10,24 @@ namespace NekoGui_sub {
         enum class State { Free, Held, Uncertain };
         // Both production runtime paths must use this instance.
         static CoreOwnership &shared();
-        bool acquire(Owner owner, QString &error);
+        bool acquire(Owner owner, QString &error, quint64 *generation = nullptr);
         // No release on an ambiguous RPC/process outcome. Only the current
         // owner can mark uncertainty; repeated fault notifications are safe.
-        bool markUncertain(Owner owner, QString &error);
+        bool markUncertain(Owner owner, QString &error, quint64 generation = 0);
         // Caller must have confirmed that the owner's runtime is stopped.
-        bool release(Owner owner, QString &error);
+        bool release(Owner owner, QString &error, quint64 generation = 0);
         // Atomically evaluate a normal stop result. Unlike confirmed cleanup
         // release(), a successful reply cannot clear pre-existing uncertainty.
-        bool finishStop(Owner owner, bool stopped, QString &error);
+        bool finishStop(Owner owner, bool stopped, QString &error, quint64 generation = 0);
+        // Zero denotes no matching active owner. Production async operations
+        // must capture a nonzero generation and pass it back on completion.
+        [[nodiscard]] quint64 generation(Owner owner) const;
         [[nodiscard]] Owner owner() const;
         [[nodiscard]] State state() const;
     private:
         mutable QMutex mutex;
         Owner active = Owner::None;
         State current = State::Free;
+        quint64 serial = 0;
     };
 }
