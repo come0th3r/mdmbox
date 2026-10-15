@@ -76,7 +76,10 @@ namespace NekoGui_sub {
             return false;
         }
         const auto previous = working; // Retain exact last-Ready bytes, not latest store.
-        if (!stop(error)) return false; // Forced/unconfirmed Stop must not restart.
+        if (!stop(error)) {
+            lastReconnect = ReconnectOutcome::StopFailed;
+            return false; // Forced/unconfirmed Stop must not restart or restore.
+        }
         lastReconnect = ReconnectOutcome::Stopped;
         if (startProfile(candidate, groupId, executable, mixedPort, apiPort, readinessTimeoutMs, error)) {
             working = WorkingSnapshot{candidate, metadata, executable, groupId, mixedPort, apiPort, readinessTimeoutMs};
@@ -104,7 +107,7 @@ namespace NekoGui_sub {
     }
 
     bool ManagedSession::stop(QString &error) {
-        const bool graceful = runtime.stop(error);
+        const bool graceful = stopSignal ? runtime.stop(stopSignal, error) : runtime.stop(error);
         if (runtime.processId() == 0) activeGroup = -1;
         if (runtime.processId() == 0) working.reset();
         return graceful;

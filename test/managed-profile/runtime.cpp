@@ -313,6 +313,34 @@ int main(int argc, char **argv) {
     if (!session.start(store, 74, executable, mixedPort, apiPort, 10000, error) ||
         !session.stop(error) || !portsClosed()) return 88;
     QTextStream(stdout) << "MANAGED_RECONNECT_EXPIRED_PREVIOUS_RESTORE_REFUSED_PASS\n";
+    // Exercise production stop/kill/reap with a refused or throwing adapter.
+    // Exact generation advance on explicit recovery proves no hidden restart.
+    for (const bool throws : {false, true}) {
+        int signalCalls = 0;
+        qint64 signaledPid = 0;
+        NekoGui_sub::ManagedSession refusedStop([&](qint64 childPid) -> bool {
+            ++signalCalls;
+            signaledPid = childPid;
+            if (throws) throw 1;
+            return false;
+        });
+        if (!refusedStop.start(store, 71, executable, mixedPort, apiPort, 10000, error)) return 96;
+        const auto oldPid = refusedStop.processId();
+        const auto oldGeneration = ownership.generation(Ownership::Owner::Managed);
+        if (!store.commit(71, failedCandidate, validate, error) ||
+            refusedStop.reconnect(store, 71, executable, mixedPort, apiPort, 10000, error) ||
+            error.isEmpty() || signalCalls != 1 || signaledPid != oldPid ||
+            refusedStop.reconnectOutcome() != NekoGui_sub::ManagedSession::ReconnectOutcome::StopFailed ||
+            refusedStop.state() != NekoGui_sub::ManagedCoreProcess::State::Failed ||
+            refusedStop.processId() != 0 || refusedStop.groupId() != -1 ||
+            ownership.owner() != Ownership::Owner::None || !portsClosed() ||
+            !store.load(71, saved, error) || saved.source != failedCandidate) return 97;
+        if (!session.start(store, 71, executable, mixedPort, apiPort, 10000, error) ||
+            ownership.generation(Ownership::Owner::Managed) != oldGeneration + 1 ||
+            !session.stop(error) || !portsClosed()) return 98;
+    }
+    if (!store.commit(71, source, validate, error)) return 99;
+    QTextStream(stdout) << "MANAGED_RECONNECT_FORCED_STOP_NO_REPLACEMENT_OR_RESTORE_PASS cases=2\n";
     QTextStream(stdout) << "MANAGED_SNAPSHOT_SESSION_READINESS_STOP_PASS\n";
     {
         NekoGui_sub::ManagedSessionController controller;

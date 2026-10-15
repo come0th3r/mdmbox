@@ -3,13 +3,17 @@
 #include "ManagedCoreProcess.hpp"
 #include "ManagedProfileStore.hpp"
 #include <optional>
+#include <utility>
 
 namespace NekoGui_sub {
     // Worker-thread-only session over the existing group-keyed snapshot store.
     // Ready is authenticated loopback readiness, never a VPN-connected claim.
     class ManagedSession {
     public:
-        enum class ReconnectOutcome { None, Rejected, Applied, Stopped, Restored, RestoreFailed };
+        enum class ReconnectOutcome { None, Rejected, Applied, Stopped, Restored, RestoreFailed, StopFailed };
+        ManagedSession() = default;
+        // Same bounded, child-specific signal contract as ManagedCoreProcess.
+        explicit ManagedSession(ManagedCoreProcess::StopSignal signal) : stopSignal(std::move(signal)) {}
         ReconnectOutcome reconnectOutcome() const { return lastReconnect; }
         bool start(const ManagedProfileStore &store, int groupId, const QString &executable,
                    int mixedPort, int apiPort, int readinessTimeoutMs, QString &error);
@@ -21,6 +25,7 @@ namespace NekoGui_sub {
         qint64 processId() const { return runtime.processId(); }
     private:
         ManagedCoreProcess runtime;
+        ManagedCoreProcess::StopSignal stopSignal;
         int activeGroup = -1;
         struct WorkingSnapshot {
             ManagedProfile profile;

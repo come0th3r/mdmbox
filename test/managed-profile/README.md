@@ -719,6 +719,29 @@ was unchanged and its ordinary build was not rerun. Forced/unconfirmed Stop,
 uncertain cleanup, exact prior routing data path and bridge reconnect remain
 NOT RUN. Loopback Ready is not a VPN-connected claim.
 
+### Reconnect forced-Stop boundary
+
+ManagedSession accepts an optional child-specific bounded StopSignal adapter;
+default construction still uses the production console helper. Reconnect now
+reports the appended outcome StopFailed if stopping the prior runtime fails,
+instead of mislabeling this as a preflight Rejected. Existing enum values are
+unchanged. Neither replacement nor restore is attempted after this failure.
+
+Two real-mihomo fixtures supply an adapter returning false or throwing. The
+normal production stop path waits, kills and reaps the owned child. Both cases
+report false/StopFailed, Failed/PID0/group-1/ownershipNone and closed ports,
+with candidate bytes unchanged. An explicit new Start advances ownership by
+exactly one generation, proving no hidden replacement/restore acquired it.
+MANAGED_RECONNECT_FORCED_STOP_NO_REPLACEMENT_OR_RESTORE_PASS cases=2.
+
+Windows ordinary Release/fixture builds, full real-mihomo runtime, CTest6/6,
+production bridge/hook/reload/crash E2E, parser39/39 and process fixtures PASS.
+The earlier forced=0 marker applies to the ordinary graceful-stop fixture;
+these new negative cases intentionally exercise forced cleanup. Unconfirmed
+kill/reap and retained Uncertain ownership are NOT RUN, not covered by a
+refused signal followed by confirmed cleanup. Controller StopFailed delivery
+and unified request-correlated reconnect completion remain NOT RUN.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under
