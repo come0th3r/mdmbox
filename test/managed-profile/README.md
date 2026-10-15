@@ -231,6 +231,14 @@ while ordinary `links` behavior remains accepted. Windows production build PASS;
 parser runner 39/39 PASS; managed-profile CTest 3/3 and real runtime regression
 PASS. Managed application lifecycle and single-core arbitration remain pending.
 
+### Core ownership primitive
+
+`CoreOwnership` is a mutex-protected None/Legacy/Managed token. Duplicate,
+empty and cross-owner operations are rejected; two competing threads have one
+winner. Windows CTest 4/4 PASS. This is not a singleton or production lifecycle
+integration: callers must share the same instance. RPC failure handling and
+actual core switching remain NOT RUN.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

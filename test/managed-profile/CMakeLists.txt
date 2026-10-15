@@ -18,6 +18,9 @@ target_sources(mdmbox_managed_runtime_smoke PRIVATE ../../sub/ManagedControllerP
 add_executable(mdmbox_controller_probe_tests controller.cpp ../../sub/ManagedControllerProbe.cpp)
 target_link_libraries(mdmbox_controller_probe_tests PRIVATE Qt6::Core Qt6::Network)
 add_test(NAME controller-probe COMMAND mdmbox_controller_probe_tests)
+add_executable(mdmbox_core_ownership_tests core-ownership.cpp ../../sub/CoreOwnership.cpp)
+target_link_libraries(mdmbox_core_ownership_tests PRIVATE Qt6::Core)
+add_test(NAME core-ownership COMMAND mdmbox_core_ownership_tests)
 # Explicit binary argument required; ordinary CTest does not start a runtime.
 if (WIN32)
     add_executable(mdmbox_console_signal ../../sys/managed-console-signal.cpp)

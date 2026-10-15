@@ -130,6 +130,8 @@ Isolated startup observation завершена: новые client-startup-deplo
 
 После восстановления SSH-доступа guard проверен на Windows: production Release build PASS; parser runner вывел GROUP_MODE_PERSISTENCE_AND_FAILURE_PRESERVATION_PASS, LEGACY_MANAGED_FALLBACK_REFUSAL_PASS и SUBSCRIPTION_PARSER_STAGING_PASS checks=39; managed-profile CTest 3/3 PASS; real pinned mihomo runtime exit0 PASS. Guard отказывает для mihomo-full/unknown direct, internal-full и chain boundary, links legacy остаётся рабочим. Изменение ещё не опубликовано на момент записи; managed lifecycle/single-core arbitration не реализованы.
 
+После `4e4b41c` добавлен изолированный `CoreOwnership` (mutex, None/Legacy/Managed): duplicate/cross-owner/empty operations reject, concurrent Legacy vs Managed даёт ровно одного победителя. GUI lifecycle пока не подключён: при failed RPC Stop нельзя освобождать ownership без подтверждения остановки. Windows managed-profile CTest 4/4 PASS (включая core-ownership), production GUI wiring и RPC-stop failure integration NOT RUN. Объект арбитра должен быть общим для обоих runtime; сам класс не singleton и не предотвращает независимые запуски вне него. Далее ownership lease/неопределённый результат RPC и подключение обеих сторон к общему экземпляру.
+
 1. Проверить branch/status и перечитать незавершённые пункты этапа 0 в плане.
 2. Проверить установленные Qt/MSVC/CMake/Ninja/Go и сборочные scripts, не запускать разрушительную пересборку до их аудита.
    Использовать предоставленный удалённый Windows-стенд: SSH уже проверен; следующий шаг — отдельный checkout и полный preflight, затем подготовка недостающих SDK. Не считать стенд чистой VM без проверки.
