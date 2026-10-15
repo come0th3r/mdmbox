@@ -82,6 +82,8 @@ public:
     // Explicit loopback-only commands, not the general VPN connect action.
     bool managedLoopbackStart(int groupId, QString &error);
     bool managedLoopbackStop(QString &error);
+    QJsonObject managedLoopbackStartResult(int groupId);
+    QJsonObject managedLoopbackStopResult();
     bool managedBlocksLegacy() const;
 
     [[nodiscard]] QString shellLogText() const;
@@ -91,6 +93,7 @@ public:
     void shellMaybeScheduleSignalProbe();
 
 signals:
+    void managedRuntimeEvent(const QJsonObject &event);
 
     void profile_selected(int id);
 

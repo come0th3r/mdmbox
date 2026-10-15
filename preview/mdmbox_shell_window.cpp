@@ -503,6 +503,9 @@ MdmBoxShellWindow::MdmBoxShellWindow(QWidget *parent) : QMainWindow(parent) {
     channel = new QWebChannel(this);
     bridge = new MdmBoxShellBridge(this, this);
     channel->registerObject(QStringLiteral("mdmboxBridge"), bridge);
+    if (auto *mw = GetMainWindow()) {
+        connect(mw, &MainWindow::managedRuntimeEvent, bridge, &MdmBoxShellBridge::managedRuntimeEvent);
+    }
     view->page()->setWebChannel(channel);
 
     connect(view, &QWebEngineView::loadFinished, this, [this](bool ok) {
@@ -585,10 +588,33 @@ void MdmBoxShellWindow::hookPage() {
           window.__mdmboxQtHooked = true;
           window.__mdmboxRouteTab = typeof window.__mdmboxRouteTab === 'number' ? window.__mdmboxRouteTab : 0;
 
-          function bindBridge() {
-            if (!window.mdmboxBridge) return;
+           function bindBridge() {
+             if (!window.mdmboxBridge) return;
 
-            function detectNavTarget(text) {
+             if (!window.__mdmboxManagedApiBound) {
+               window.__mdmboxManagedApiBound = true;
+               window.mdmboxManaged = {
+                 start: function (groupId, requestId) {
+                   window.mdmboxBridge.managedStart(groupId, String(requestId || ""));
+                 },
+                 stop: function (requestId) {
+                   window.mdmboxBridge.managedStop(String(requestId || ""));
+                 }
+               };
+               if (window.mdmboxBridge.managedCommandResult &&
+                   window.mdmboxBridge.managedCommandResult.connect) {
+                 window.mdmboxBridge.managedCommandResult.connect(function (requestId, result) {
+                   window.dispatchEvent(new CustomEvent("mdmbox-managed-command-result", {
+                     detail: { requestId: requestId, result: result }
+                   }));
+                 });
+               }
+               window.mdmboxBridge.managedRuntimeEvent.connect(function (event) {
+                 window.dispatchEvent(new CustomEvent("mdmbox-managed-runtime", { detail: event }));
+               });
+             }
+
+             function detectNavTarget(text) {
               const normalized = (text || '').trim();
               if (!normalized) return '';
               if (normalized.includes('Панель')) return 'dashboard';
@@ -1581,6 +1607,26 @@ void MdmBoxShellWindow::triggerConnectToggle() {
     }
     mw->neko_start(id);
     refreshPageState();
+}
+
+QJsonObject MdmBoxShellWindow::managedLoopbackStartResult(int groupId) {
+    if (auto *mw = GetMainWindow()) return mw->managedLoopbackStartResult(groupId);
+    return {{QStringLiteral("schemaVersion"), 1},
+            {QStringLiteral("command"), QStringLiteral("managedStart")},
+            {QStringLiteral("accepted"), false},
+            {QStringLiteral("queued"), false},
+            {QStringLiteral("error"), QStringLiteral("Main window is unavailable")},
+            {QStringLiteral("runtime"), QJsonObject{}}};
+}
+
+QJsonObject MdmBoxShellWindow::managedLoopbackStopResult() {
+    if (auto *mw = GetMainWindow()) return mw->managedLoopbackStopResult();
+    return {{QStringLiteral("schemaVersion"), 1},
+            {QStringLiteral("command"), QStringLiteral("managedStop")},
+            {QStringLiteral("accepted"), false},
+            {QStringLiteral("queued"), false},
+            {QStringLiteral("error"), QStringLiteral("Main window is unavailable")},
+            {QStringLiteral("runtime"), QJsonObject{}}};
 }
 
 void MdmBoxShellWindow::triggerTunToggle() {

@@ -60,6 +60,7 @@ void UI_InitMainWindow() {
 #include "sub/ManagedSessionController.hpp"
 #include "sub/ManagedLaunchPolicy.hpp"
 #endif
+#include "sub/ManagedCommandContract.hpp"
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
     mainwindow = this;
@@ -75,6 +76,20 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->setupUi(this);
 #ifndef NKR_NO_YAML
     managed_session_controller = new NekoGui_sub::ManagedSessionController(this);
+    connect(managed_session_controller, &NekoGui_sub::ManagedSessionController::operationFinished,
+            this, [this](bool success, const QString &) {
+        emit managedRuntimeEvent({{QStringLiteral("schemaVersion"), 1},
+            {QStringLiteral("type"), QStringLiteral("operationFinished")},
+            {QStringLiteral("success"), success},
+            {QStringLiteral("runtime"), shellManagedRuntimeState()}});
+    });
+    connect(managed_session_controller, &NekoGui_sub::ManagedSessionController::runtimeFailed,
+            this, [this](const QString &) {
+        emit managedRuntimeEvent({{QStringLiteral("schemaVersion"), 1},
+            {QStringLiteral("type"), QStringLiteral("runtimeFailed")},
+            {QStringLiteral("success"), false},
+            {QStringLiteral("runtime"), shellManagedRuntimeState()}});
+    });
 #endif
     //
     connect(ui->menu_start, &QAction::triggered, this, [=]() { neko_start(); });
@@ -559,6 +574,20 @@ bool MainWindow::managedLoopbackStop(QString &error) {
     error = QStringLiteral("Managed runtime is unavailable in this build");
 #endif
     return false;
+}
+
+QJsonObject MainWindow::managedLoopbackStartResult(int groupId) {
+    QString error;
+    const bool accepted = managedLoopbackStart(groupId, error);
+    return NekoGui_sub::ManagedCommandContract::result(QStringLiteral("managedStart"),
+        accepted, error, shellManagedRuntimeState());
+}
+
+QJsonObject MainWindow::managedLoopbackStopResult() {
+    QString error;
+    const bool accepted = managedLoopbackStop(error);
+    return NekoGui_sub::ManagedCommandContract::result(QStringLiteral("managedStop"),
+        accepted, error, shellManagedRuntimeState());
 }
 
 bool MainWindow::managedBlocksLegacy() const {

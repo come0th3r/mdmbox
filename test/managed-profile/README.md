@@ -517,6 +517,32 @@ are NOT RUN. These are application-state guards, not a cross-thread OS
 transaction. QWebChannel mutation commands remain unexposed pending the
 command/result bridge contract and its end-to-end tests.
 
+### Explicit QWebChannel commands and acknowledgement
+
+Production bridge now exposes managedStart(groupId, requestId) and
+managedStop(requestId), separate from connectToggle. IDs must be JSON numbers
+representing nonnegative integral int values; strings/booleans/fractions and
+overflow are refused before group lookup. Shared ManagedCommandContract emits
+schema1 command/accepted/queued/error/runtime. accepted means queued only.
+requestId is echoed in managedCommandResult (acknowledgement, not completion).
+The JS helper window.mdmboxManaged dispatches mdmbox-managed-command-result.
+
+MainWindow forwards controller operationFinished/runtimeFailed in sanitized
+managedRuntimeEvent objects (schemaVersion/type/success/runtime). JS dispatches
+mdmbox-managed-runtime. No raw validator diagnostics or profile content are
+sent in these completion events; events are global, not request-correlated.
+No visible controls or automatic start/reconnect are added.
+
+Production/fixture builds PASS, CTest6/6 PASS, parser39/39/process fixtures PASS,
+full real-mihomo smoke PASS exit0/forced0. test/webengine-smoke uses real
+offscreen Qt6.7.2 WebEngine/QWebChannel with the shared contract parser/result:
+MANAGED_COMMAND_JSON_WEBCHANNEL_CONTRACT_PASS cases=10. Its backend always
+refuses launch, checking JSON transport, invalid IDs, valid IDs71/0, request
+echo and no VPN claim. Known GPU/font/offscreen warnings remain.
+This is NOT a production MainWindow launch E2E. Actual group→JS→production
+bridge→MainWindow→core→completion, stop transport, mode transitions, navigation
+lifetime and no-YAML build remain NOT RUN.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

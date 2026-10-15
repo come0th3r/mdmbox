@@ -1,6 +1,7 @@
 #include "mdmbox_shell_bridge.h"
 
 #include "mdmbox_shell_window.h"
+#include "sub/ManagedCommandContract.hpp"
 
 MdmBoxShellBridge::MdmBoxShellBridge(MdmBoxShellWindow *window, QObject *parent)
     : QObject(parent), window(window) {}
@@ -11,6 +12,24 @@ void MdmBoxShellBridge::navigate(const QString &pageKey) {
 
 void MdmBoxShellBridge::connectToggle() {
     if (window) window->triggerConnectToggle();
+}
+
+void MdmBoxShellBridge::managedStart(const QJsonValue &groupId, const QString &requestId) {
+    int id = -1;
+    if (!NekoGui_sub::ManagedCommandContract::groupId(groupId, id)) {
+        emit managedCommandResult(requestId, NekoGui_sub::ManagedCommandContract::result(
+            QStringLiteral("managedStart"), false, QStringLiteral("Invalid group ID"), {}));
+        return;
+    }
+    emit managedCommandResult(requestId, window ? window->managedLoopbackStartResult(id) :
+        NekoGui_sub::ManagedCommandContract::result(QStringLiteral("managedStart"), false,
+            QStringLiteral("Shell is unavailable"), {}));
+}
+
+void MdmBoxShellBridge::managedStop(const QString &requestId) {
+    emit managedCommandResult(requestId, window ? window->managedLoopbackStopResult() :
+        NekoGui_sub::ManagedCommandContract::result(QStringLiteral("managedStop"), false,
+            QStringLiteral("Shell is unavailable"), {}));
 }
 
 void MdmBoxShellBridge::toggleTun() {

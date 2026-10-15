@@ -2,6 +2,7 @@
 
 #include <QMainWindow>
 #include <QString>
+#include <QJsonObject>
 
 class QWebChannel;
 class QCloseEvent;
@@ -21,6 +22,8 @@ public:
     void hookPage();
     void refreshPageState();
     void triggerConnectToggle();
+    QJsonObject managedLoopbackStartResult(int groupId);
+    QJsonObject managedLoopbackStopResult();
     void triggerTunToggle();
     void triggerSystemProxyToggle();
     void triggerClipboardImport();

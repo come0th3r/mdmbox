@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QJsonObject>
 
 class MdmBoxShellWindow;
 
@@ -13,6 +14,10 @@ public:
 public slots:
     void navigate(const QString &pageKey);
     void connectToggle();
+    // Explicit loopback-only managed commands. requestId is echoed in the
+    // result signal so JavaScript can correlate queued operations.
+    void managedStart(const QJsonValue &groupId, const QString &requestId);
+    void managedStop(const QString &requestId);
     void toggleTun();
     void toggleSystemProxy();
     void importClipboard();
@@ -32,6 +37,10 @@ public slots:
     void maximizeWindow();
     void closeWindow();
     void exitProgram();
+
+signals:
+    void managedCommandResult(const QString &requestId, const QJsonObject &result);
+    void managedRuntimeEvent(const QJsonObject &event);
 
 private:
     MdmBoxShellWindow *window = nullptr;
