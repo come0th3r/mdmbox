@@ -690,6 +690,15 @@ data-path verification remain NOT RUN. Captured metadata cannot establish
 server revocation/current concurrent updates; this is not a completed
 refresh transaction or release gate.
 
+The controller runtime fixture also waits for the separately queued
+`reconnectFinished(int)` signal after `operationFinished`: successful
+replacement reports Applied; group/resource/expired-candidate rejection after
+operation dispatch reports Rejected. Invalid timeout is rejected before
+dispatch and emits no reconnect outcome. Real mihomo runtime, CTest6/6,
+parser39/39 and process fixtures PASS. Controller-level Restored/RestoreFailed,
+expired previous snapshot, double failure and forced/unconfirmed Stop remain
+NOT RUN.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

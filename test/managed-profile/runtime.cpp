@@ -294,12 +294,16 @@ int main(int argc, char **argv) {
             initialSnapshot.value("scope").toString() != "loopback-only" ||
             initialSnapshot.value("vpnConnected").toBool() || initialSnapshot.size() != 8) return 61;
         bool completed = false, succeeded = false;
+        bool reconnectOutcomeReceived = false;
+        int reconnectOutcome = -1;
         int status = -1, group = -1;
         qint64 pid = 0;
         QObject::connect(&controller, &NekoGui_sub::ManagedSessionController::statusChanged,
             &app, [&](int s, int g, qint64 p) { status = s; group = g; pid = p; });
         QObject::connect(&controller, &NekoGui_sub::ManagedSessionController::operationFinished,
             &app, [&](bool ok, const QString &) { completed = true; succeeded = ok; });
+        QObject::connect(&controller, &NekoGui_sub::ManagedSessionController::reconnectFinished,
+            &app, [&](int outcome) { reconnectOutcomeReceived = true; reconnectOutcome = outcome; });
         auto await = [&] {
             QElapsedTimer timer;
             timer.start();
@@ -309,6 +313,16 @@ int main(int argc, char **argv) {
                 pause.exec();
             }
             return completed;
+        };
+        auto awaitReconnectOutcome = [&] {
+            QElapsedTimer timer;
+            timer.start();
+            while (!reconnectOutcomeReceived && timer.elapsed() < 30000) {
+                QEventLoop pause;
+                QTimer::singleShot(10, &pause, &QEventLoop::quit);
+                pause.exec();
+            }
+            return reconnectOutcomeReceived;
         };
         if (!controller.start(snapshots.path(), 71, executable, mixedPort, apiPort, 10000) ||
             !controller.busy() || controller.stop() ||
@@ -320,29 +334,45 @@ int main(int argc, char **argv) {
             readySnapshot.value("groupId").toInt() != 71 || readySnapshot.contains("token") ||
             readySnapshot.contains("processId")) return 62;
         completed = false;
+        reconnectOutcomeReceived = false;
         const auto beforeReconnect = pid;
         const auto beforeReconnectGeneration = ownership.generation(Ownership::Owner::Managed);
         if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, apiPort, 0) ||
-            !await() || succeeded || pid != beforeReconnect || !controller.snapshot().value("controllerReady").toBool()) return 65;
+            !await() || succeeded || !awaitReconnectOutcome() ||
+            reconnectOutcome != static_cast<int>(NekoGui_sub::ManagedSession::ReconnectOutcome::Rejected) ||
+            pid != beforeReconnect ||
+            !controller.snapshot().value("controllerReady").toBool()) return 65;
         completed = false;
+        reconnectOutcomeReceived = false;
         if (!controller.reconnect(snapshots.path(), 72, executable, mixedPort, apiPort, 10000) ||
-            !await() || succeeded || pid != beforeReconnect) return 66;
+            !await() || succeeded || !awaitReconnectOutcome() ||
+            reconnectOutcome != static_cast<int>(NekoGui_sub::ManagedSession::ReconnectOutcome::Rejected) ||
+            pid != beforeReconnect) return 66;
         // A valid stored document may still be rejected by execution policy.
         const QByteArray resourceCandidate = source + "rule-providers: {external: {type: http, url: 'https://example.invalid/rules', path: rules.yaml}}\n";
         const auto parserOnly = [](const NekoGui_sub::ManagedProfile &, QString &) { return true; };
         if (!store.commit(71, resourceCandidate, parserOnly, error)) return 67;
         completed = false;
+        reconnectOutcomeReceived = false;
         if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, apiPort, 10000) ||
-            !await() || succeeded || pid != beforeReconnect || !controller.snapshot().value("controllerReady").toBool()) return 68;
+            !await() || succeeded || !awaitReconnectOutcome() ||
+            pid != beforeReconnect ||
+            !controller.snapshot().value("controllerReady").toBool()) return 68;
         if (!store.commit(71, source, expired, validate, error)) return 69;
         completed = false;
+        reconnectOutcomeReceived = false;
         if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, apiPort, 10000) ||
-            !await() || succeeded || pid != beforeReconnect) return 70;
+            !await() || succeeded || !awaitReconnectOutcome() ||
+            reconnectOutcome != static_cast<int>(NekoGui_sub::ManagedSession::ReconnectOutcome::Rejected) ||
+            pid != beforeReconnect) return 70;
         const auto replacementSource = source + "# refreshed synthetic snapshot\n";
         if (!store.commit(71, replacementSource, validate, error)) return 71;
         completed = false;
+        reconnectOutcomeReceived = false;
         if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, apiPort, 10000) ||
-            !controller.busy() || controller.stop() || !await() || !succeeded || pid == 0 ||
+            !controller.busy() || controller.stop() || !await() || !succeeded || !awaitReconnectOutcome() ||
+            reconnectOutcome != static_cast<int>(NekoGui_sub::ManagedSession::ReconnectOutcome::Applied) ||
+            pid == 0 ||
             group != 71 || !controller.snapshot().value("controllerReady").toBool() ||
             ownership.generation(Ownership::Owner::Managed) <= beforeReconnectGeneration) return 72;
         if (!store.load(71, saved, error) || saved.source != replacementSource) return 73;
