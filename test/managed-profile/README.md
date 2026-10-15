@@ -305,6 +305,23 @@ real-mihomo runtime PASS exit 0/forced=0. Direct runner prints
 test actual ExternalProcess::Kill, queued GUI delays/timeouts, descendant
 trees or automatic recovery. No system proxy, TUN, DNS or routes are enabled.
 
+### Production ExternalProcess kill retry regression
+
+The production-graph subscription parser runner now includes
+`test/subscription-parser/ExternalProcessFixture.hpp`. It starts real bounded
+self-child processes through ExternalProcess::Start and calls the genuine
+ExternalProcess::Kill for all four injected prior killed/crashed flag pairs.
+Shared tracked cleanup confirms NotRunning/PID0 before normal ownership
+switching; repeated Kill of an exited child is also checked. Production Kill
+now retries live processes regardless of those flags instead of treating an
+earlier stop request or error as proof of exit.
+
+Windows production build PASS, `EXTERNAL_PROCESS_REAL_KILL_RETRY_PASS cases=4`,
+parser 39/39 PASS, CTest 5/5 PASS and real-mihomo smoke PASS exit 0/forced=0.
+Prior flags are injected; actual timeout/error callbacks, managed=true crash
+notifications, GUI queue faults, descendants and automatic recovery are NOT
+RUN. The fixture does not authorize clearing a previously uncertain owner.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

@@ -1,6 +1,8 @@
 #include "sub/GroupUpdater.hpp"
 #include "db/ConfigBuilder.hpp"
 #include "fmt/CustomBean.hpp"
+#include "ExternalProcessFixture.hpp"
+#include <QTimer>
 #include <QApplication>
 #include <QDir>
 #include <QFile>
@@ -19,10 +21,16 @@ public:
 };
 
 int main(int argc, char **argv) {
+    if (argc == 2 && QString::fromLocal8Bit(argv[1]) == QStringLiteral("--external-process-child")) {
+        QCoreApplication child(argc, argv);
+        QTimer::singleShot(10000, &child, &QCoreApplication::quit);
+        return child.exec();
+    }
     QApplication app(argc, argv);
     // Production window installs these callbacks; isolated runner must supply safe sinks.
     MW_show_log = [](QString) {};
     MW_dialog_message = [](QString, QString) {};
+    if (!runExternalProcessFixture()) return 80;
     QTemporaryDir directory;
     WorkingDirectoryGuard workingDirectory; // Restore cwd before temporary directory cleanup.
     if (!directory.isValid() || !QDir::setCurrent(directory.path())) return 2;

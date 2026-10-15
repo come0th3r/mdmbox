@@ -57,10 +57,12 @@ namespace NekoGui_sys {
     }
 
     void ExternalProcess::Kill() {
-        if (killed) return;
+        // This flag suppresses intentional-stop crash notifications; it is
+        // not proof that an earlier kill/wait completed. Retry live children
+        // even after a timeout or an error notification set crashed.
         killed = true;
 
-        if (!crashed) {
+        if (state() != QProcess::NotRunning) {
             QProcess::kill();
             QProcess::waitForFinished(500);
         }
