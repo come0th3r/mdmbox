@@ -2,6 +2,7 @@
 
 #include "mdmbox_shell_window.h"
 #include "ui/mainwindow.h"
+#include <QTimer>
 
 namespace {
 
@@ -23,11 +24,15 @@ void ShowMdmBoxShell() {
     // Source archives may not include the optional HTML shell. Keep the
     // existing native interface reachable instead of presenting a blank view.
     if (!window->hasLocalShell()) {
-        if (auto *main = GetMainWindow()) {
-            main->show();
-            main->raise();
-            main->activateWindow();
-        }
+        // Initial call can occur inside MainWindow's constructor, before its
+        // global pointer is assigned by UI_InitMainWindow.
+        QTimer::singleShot(0, window, [] {
+            if (auto *main = GetMainWindow()) {
+                main->show();
+                main->raise();
+                main->activateWindow();
+            }
+        });
         return;
     }
     window->show();
