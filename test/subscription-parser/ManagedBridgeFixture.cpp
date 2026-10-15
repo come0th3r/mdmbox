@@ -58,6 +58,8 @@ int runManagedBridgeFixture(QApplication &app) {
     int startReplies = 0, busyReplies = 0, stopReplies = 0;
     int readyEvents = 0, stoppedEvents = 0, crashEvents = 0, loadedPages = 0;
     int restoredReady = 0;
+    int reconnectReplies = 0, reconnectEvents = 0, refusedReconnectReplies = 0;
+    int rejectedReplies = 0, rejectedEvents = 0;
     bool failed = false;
     auto await = [&](const std::function<bool()> &condition) {
         QElapsedTimer timer;
@@ -79,6 +81,13 @@ int runManagedBridgeFixture(QApplication &app) {
         else if (id == "js-crashed") { phase = 3; ++crashEvents; }
         else if (id == "js-loaded") ++loadedPages;
         else if (id == "js-restored-ready") ++restoredReady;
+        else if (id == "reconnect") { ++reconnectReplies; if (!r.value("accepted").toBool()) failed = true; }
+        else if (id == "reconnect-busy" || id == "reconnect-invalid" || id == "reconnect-inactive") {
+            ++refusedReconnectReplies; if (r.value("accepted").toBool()) failed = true;
+        }
+        else if (id == "js-reconnected") ++reconnectEvents;
+        else if (id == "reconnect-rejected") { ++rejectedReplies; if (!r.value("accepted").toBool()) failed = true; }
+        else if (id == "js-reconnect-rejected") ++rejectedEvents;
         else if (id == "js-failed") failed = true;
     });
     QObject::connect(&page, &QWebEnginePage::renderProcessTerminated, &app,
@@ -100,6 +109,19 @@ int runManagedBridgeFixture(QApplication &app) {
         window.addEventListener('mdmbox-managed-runtime',function(event){
             const e=event.detail,m=window.mdmboxManaged;
             if(e.schemaVersion!==1||e.runtime.vpnConnected){m.start(null,'js-failed');return;}
+            if(e.type==='reconnectCompleted'){
+              if(e.requestId==='reconnect-rejected'){
+                if(e.command!=='managedReconnect'||e.success||e.outcome!=='rejected'||!e.error||
+                   e.runtime.state!=='ready'||!e.runtime.controllerReady)m.start(null,'js-failed');
+                else m.start(null,'js-reconnect-rejected');
+                return;
+              }
+              if(e.requestId!=='reconnect'||e.command!=='managedReconnect'||!e.success||
+                 e.outcome!=='applied'||e.error!==''||e.runtime.state!=='ready'||!e.runtime.controllerReady)
+                m.start(null,'js-failed');
+              else m.start(null,'js-reconnected');
+              return;
+            }
             if(e.type==='operationFinished'&&
               ((e.runtime.state==='ready'&&(e.requestId!=='start'||e.command!=='managedStart'))||
                (e.runtime.state==='stopped'&&(e.requestId!=='stop'||e.command!=='managedStop')))){
@@ -118,6 +140,8 @@ int runManagedBridgeFixture(QApplication &app) {
         </script>)HTML");
     page.setHtml(script, QUrl("qrc:///"));
     if (!await([&] { return loadedPages == 1; })) return 99;
+    page.runJavaScript(QString("window.mdmboxManaged.reconnect(%1,'reconnect-inactive');window.mdmboxManaged.reconnect(null,'reconnect-invalid')").arg(group->id));
+    if (!await([&] { return refusedReconnectReplies == 2; })) return 106;
     // Repeated hook calls must not duplicate signal bindings.
     shell.hookPage();
     shell.hookPage();
@@ -133,6 +157,25 @@ int runManagedBridgeFixture(QApplication &app) {
     page.setHtml(script, QUrl("qrc:///"));
     if (!await([&] { return loadedPages == 2 && restoredReady == 2; }) || readyEvents != 1 ||
         !window.shellManagedRuntimeState().value("controllerReady").toBool()) return 100;
+    auto *reconnectController = window.findChild<NekoGui_sub::ManagedSessionController *>();
+    if (!reconnectController) return 107;
+    const auto oldGeneration = NekoGui_sub::CoreOwnership::shared().generation(NekoGui_sub::CoreOwnership::Owner::Managed);
+    page.runJavaScript(QString("window.mdmboxManaged.reconnect(%1,'reconnect');window.mdmboxManaged.reconnect(%1,'reconnect-busy')").arg(group->id));
+    if (!await([&] { return reconnectEvents == 1; }) || reconnectReplies != 1 || refusedReconnectReplies != 3 ||
+        readyEvents != 1 || reconnectController->processId() <= 0 ||
+        NekoGui_sub::CoreOwnership::shared().generation(NekoGui_sub::CoreOwnership::Owner::Managed) <= oldGeneration) return 108;
+    const auto preservedPid = reconnectController->processId();
+    const auto preservedGeneration = NekoGui_sub::CoreOwnership::shared().generation(NekoGui_sub::CoreOwnership::Owner::Managed);
+    const auto resourceCandidate = source + "rule-providers: {external: {type: http, url: 'https://example.invalid/rules', path: rules.yaml}}\n";
+    if (!store.commit(group->id, resourceCandidate,
+        [](const NekoGui_sub::ManagedProfile &, QString &) { return true; }, error)) return 110;
+    page.runJavaScript(QString("window.mdmboxManaged.reconnect(%1,'reconnect-rejected')").arg(group->id));
+    if (!await([&] { return rejectedEvents == 1; }) || rejectedReplies != 1 ||
+        reconnectController->processId() != preservedPid ||
+        NekoGui_sub::CoreOwnership::shared().generation(NekoGui_sub::CoreOwnership::Owner::Managed) != preservedGeneration) return 111;
+    if (!store.commit(group->id, source, [&](const NekoGui_sub::ManagedProfile &profile, QString &e) {
+        return NekoGui_sub::MihomoValidator::validate(executable, profile, e);
+    }, error)) return 112;
 #ifdef Q_OS_WIN
     auto *controller = window.findChild<NekoGui_sub::ManagedSessionController *>();
     if (!controller || controller->processId() <= 0) return 101;
@@ -161,6 +204,10 @@ int runManagedBridgeFixture(QApplication &app) {
     if (stoppedEvents != 1) return 105;
     QTextStream(stdout) << "MANAGED_PRODUCTION_HOOK_CUSTOM_EVENT_RELOAD_PASS\n";
     QTextStream(stdout) << "MANAGED_PRODUCTION_RELOAD_READY_SNAPSHOT_RESYNC_PASS\n";
+    if (reconnectEvents != 1) return 109;
+    QTextStream(stdout) << "MANAGED_PRODUCTION_BRIDGE_RECONNECT_CORRELATED_APPLIED_PASS\n";
+    if (rejectedEvents != 1) return 113;
+    QTextStream(stdout) << "MANAGED_PRODUCTION_BRIDGE_RECONNECT_REJECTED_RETAINS_READY_PASS\n";
 #ifdef Q_OS_WIN
     QTextStream(stdout) << "MANAGED_PRODUCTION_CRASH_JS_FAILED_RESTART_PASS\n";
 #endif

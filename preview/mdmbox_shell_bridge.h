@@ -18,6 +18,7 @@ public slots:
     // result signal so JavaScript can correlate queued operations.
     void managedStart(const QJsonValue &groupId, const QString &requestId);
     void managedStop(const QString &requestId);
+    void managedReconnect(const QJsonValue &groupId, const QString &requestId);
     QJsonObject managedSnapshot();
     void toggleTun();
     void toggleSystemProxy();

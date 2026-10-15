@@ -36,6 +36,18 @@ QJsonObject MdmBoxShellBridge::managedSnapshot() {
     return window ? window->managedRuntimeSnapshot() : QJsonObject{};
 }
 
+void MdmBoxShellBridge::managedReconnect(const QJsonValue &groupId, const QString &requestId) {
+    int id = -1;
+    if (!NekoGui_sub::ManagedCommandContract::groupId(groupId, id)) {
+        emit managedCommandResult(requestId, NekoGui_sub::ManagedCommandContract::result(
+            QStringLiteral("managedReconnect"), false, QStringLiteral("Invalid group ID"), {}));
+        return;
+    }
+    emit managedCommandResult(requestId, window ? window->managedLoopbackReconnectResult(id, requestId) :
+        NekoGui_sub::ManagedCommandContract::result(QStringLiteral("managedReconnect"), false,
+            QStringLiteral("Shell is unavailable"), {}));
+}
+
 void MdmBoxShellBridge::toggleTun() {
     if (window) window->triggerTunToggle();
 }

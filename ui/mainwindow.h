@@ -84,6 +84,7 @@ public:
     bool managedLoopbackStop(QString &error);
     QJsonObject managedLoopbackStartResult(int groupId, const QString &requestId = {});
     QJsonObject managedLoopbackStopResult(const QString &requestId = {});
+    QJsonObject managedLoopbackReconnectResult(int groupId, const QString &requestId);
     bool managedBlocksLegacy() const;
 
     [[nodiscard]] QString shellLogText() const;

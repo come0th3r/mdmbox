@@ -788,6 +788,35 @@ bridge/hook/reload/crash E2E, parser39/39 and process fixtures PASS.
 Nested event-loop pumping/destruction inside notification observers is not
 covered. Unconfirmed cleanup and bridge reconnect remain NOT RUN.
 
+### Explicit production bridge reconnect
+
+QWebChannel now exposes managedReconnect(groupId, requestId), with JS helper
+window.mdmboxManaged.reconnect(groupId, requestId). Application admission
+requires a nonempty request ID of at most 128 UTF-16 units, a nonarchived
+mihomo-full group matching the active Ready session, idle controller and the
+same launch-policy guards against legacy/system proxy/TUN/shutdown as Start.
+The command applies an already stored snapshot; it does not download or
+automatically refresh anything. Executable/ports remain internal constants.
+
+Immediate managed-command-result is admission only. Accepted reconnect emits
+one managed-runtime event with type=reconnectCompleted, command=managedReconnect,
+requestId, success, stable outcome string, sanitized error and the captured
+runtime snapshot. Outcome strings are rejected/applied/stopped/restored/
+restore-failed/stop-failed (none reserved). Compatibility operationFinished is
+not forwarded again for that reconnect. Ready is loopback API, not VPN.
+
+Production WebEngine hook/JS/channel/MainWindow/controller/real-mihomo E2E
+PASS: applied reconnect with advanced ownership generation, busy duplicate
+refusal, invalid group and inactive-session refusal; policy-rejected stored
+resource candidate reports false/rejected while retaining old PID/Ready and
+ownership generation. Prior reload/crash/restart/Stop coverage still PASS.
+MANAGED_PRODUCTION_BRIDGE_RECONNECT_CORRELATED_APPLIED_PASS and
+MANAGED_PRODUCTION_BRIDGE_RECONNECT_REJECTED_RETAINS_READY_PASS.
+Windows ordinary/fixture builds, CTest6/6, parser39/39 + process fixtures and
+full real-mihomo runtime PASS. Bridge Restored/RestoreFailed/StopFailed event
+delivery, no-YAML build, ID replay, actual endpoint transition and automatic
+refresh/apply remain NOT RUN. No visible Figma control is added in this step.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

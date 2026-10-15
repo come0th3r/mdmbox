@@ -82,12 +82,34 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         const auto command = managed_request_command;
         managed_request_id.clear();
         managed_request_command.clear();
+        if (command == QStringLiteral("managedReconnect")) return; // Unified completion already delivered.
         emit managedRuntimeEvent({{QStringLiteral("schemaVersion"), 1},
             {QStringLiteral("type"), QStringLiteral("operationFinished")},
             {QStringLiteral("requestId"), requestId},
             {QStringLiteral("command"), command},
             {QStringLiteral("success"), success},
             {QStringLiteral("runtime"), shellManagedRuntimeState()}});
+    });
+    connect(managed_session_controller, &NekoGui_sub::ManagedSessionController::reconnectCompleted,
+            this, [this](const QString &requestId, bool success, int outcome, const QString &error,
+                         const QJsonObject &snapshot) {
+        QString name;
+        using Outcome = NekoGui_sub::ManagedSession::ReconnectOutcome;
+        switch (static_cast<Outcome>(outcome)) {
+        case Outcome::Rejected: name = QStringLiteral("rejected"); break;
+        case Outcome::Applied: name = QStringLiteral("applied"); break;
+        case Outcome::Stopped: name = QStringLiteral("stopped"); break;
+        case Outcome::Restored: name = QStringLiteral("restored"); break;
+        case Outcome::RestoreFailed: name = QStringLiteral("restore-failed"); break;
+        case Outcome::StopFailed: name = QStringLiteral("stop-failed"); break;
+        case Outcome::None: name = QStringLiteral("none"); break;
+        }
+        emit managedRuntimeEvent({{QStringLiteral("schemaVersion"), 1},
+            {QStringLiteral("type"), QStringLiteral("reconnectCompleted")},
+            {QStringLiteral("requestId"), requestId},
+            {QStringLiteral("command"), QStringLiteral("managedReconnect")},
+            {QStringLiteral("success"), success}, {QStringLiteral("outcome"), name},
+            {QStringLiteral("error"), error}, {QStringLiteral("runtime"), snapshot}});
     });
     connect(managed_session_controller, &NekoGui_sub::ManagedSessionController::runtimeFailed,
             this, [this](const QString &) {
@@ -603,6 +625,43 @@ QJsonObject MainWindow::managedLoopbackStopResult(const QString &requestId) {
         managed_request_command = QStringLiteral("managedStop");
     }
     return NekoGui_sub::ManagedCommandContract::result(QStringLiteral("managedStop"),
+        accepted, error, shellManagedRuntimeState());
+}
+
+QJsonObject MainWindow::managedLoopbackReconnectResult(int groupId, const QString &requestId) {
+    QString error;
+    bool accepted = false;
+#ifndef NKR_NO_YAML
+    const auto group = NekoGui::profileManager->GetGroup(groupId);
+    if (requestId.isEmpty() || requestId.size() > 128) {
+        error = QStringLiteral("Reconnect request ID must be 1..128 characters");
+    } else if (!NekoGui_sub::ManagedLaunchPolicy::allow(group != nullptr, group && group->archive,
+            group ? group->subscription_kind : QString(), NekoGui::dataStore->spmode_system_proxy,
+            NekoGui::dataStore->spmode_vpn || vpn_pid != 0, NekoGui::dataStore->started_id >= 0 ||
+            core_ownership.owner() == NekoGui_sub::CoreOwnership::Owner::Legacy,
+            NekoGui::dataStore->prepare_exit, error)) {
+        // Policy failure must not enqueue a runtime operation.
+    } else if (!managed_session_controller || managed_session_controller->busy()) {
+        error = QStringLiteral("Managed controller is unavailable or busy");
+    } else if (managed_session_controller->groupId() != groupId ||
+               managed_session_controller->state() != static_cast<int>(NekoGui_sub::ManagedCoreProcess::State::Ready) ||
+               managed_session_controller->processId() == 0) {
+        error = QStringLiteral("Reconnect requires the same active ready managed group");
+    } else {
+        accepted = managed_session_controller->reconnect(QStringLiteral("managed-subscriptions"), groupId,
+            QCoreApplication::applicationDirPath() + QStringLiteral("/mihomo.exe"), 17890, 19090, 10000, requestId);
+        if (!accepted) error = QStringLiteral("Managed reconnect was refused");
+    }
+#else
+    Q_UNUSED(groupId)
+    Q_UNUSED(requestId)
+    error = QStringLiteral("Managed runtime is unavailable in this build");
+#endif
+    if (accepted) {
+        managed_request_id = requestId;
+        managed_request_command = QStringLiteral("managedReconnect");
+    }
+    return NekoGui_sub::ManagedCommandContract::result(QStringLiteral("managedReconnect"),
         accepted, error, shellManagedRuntimeState());
 }
 
