@@ -285,6 +285,34 @@ int main(int argc, char **argv) {
     if (!session.stop(error) || !portsClosed()) return 80;
     if (!store.commit(71, source, validate, error)) return 83;
     QTextStream(stdout) << "MANAGED_RECONNECT_PREFLIGHT_AND_BOUNDED_RESTORE_PASS\n";
+    // Let the captured working metadata expire naturally, then fail replacement.
+    // The current store is healthy; rollback must use the captured OLD expiry.
+    NekoGui_sub::SubscriptionMetadata shortLived;
+    shortLived.expiry = QDateTime::currentSecsSinceEpoch() + 15;
+    if (!store.commit(74, source, shortLived, validate, error) ||
+        !session.start(store, 74, executable, mixedPort, apiPort, 10000, error) ||
+        shortLived.expired(QDateTime::currentSecsSinceEpoch())) return 84;
+    if (!store.commit(74, failedCandidate, validate, error) ||
+        !occupiedApi.listen(QHostAddress::LocalHost, 0)) return 85;
+    QElapsedTimer expiryDeadline;
+    expiryDeadline.start();
+    while (!shortLived.expired(QDateTime::currentSecsSinceEpoch()) && expiryDeadline.elapsed() < 20000) {
+        QEventLoop pause;
+        QTimer::singleShot(25, &pause, &QEventLoop::quit);
+        pause.exec();
+    }
+    if (!shortLived.expired(QDateTime::currentSecsSinceEpoch()) ||
+        session.state() != NekoGui_sub::ManagedCoreProcess::State::Ready) return 86;
+    if (session.reconnect(store, 74, executable, mixedPort, occupiedApi.serverPort(), 500, error) ||
+        error.isEmpty() || session.processId() != 0 || session.groupId() != -1 ||
+        session.state() != NekoGui_sub::ManagedCoreProcess::State::Failed ||
+        session.reconnectOutcome() != NekoGui_sub::ManagedSession::ReconnectOutcome::Stopped ||
+        ownership.owner() != Ownership::Owner::None || !portsClosed() ||
+        !occupiedApi.isListening() || !store.load(74, saved, error) || saved.source != failedCandidate) return 87;
+    occupiedApi.close();
+    if (!session.start(store, 74, executable, mixedPort, apiPort, 10000, error) ||
+        !session.stop(error) || !portsClosed()) return 88;
+    QTextStream(stdout) << "MANAGED_RECONNECT_EXPIRED_PREVIOUS_RESTORE_REFUSED_PASS\n";
     QTextStream(stdout) << "MANAGED_SNAPSHOT_SESSION_READINESS_STOP_PASS\n";
     {
         NekoGui_sub::ManagedSessionController controller;
@@ -356,6 +384,7 @@ int main(int argc, char **argv) {
         reconnectOutcomeReceived = false;
         if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, apiPort, 10000) ||
             !await() || succeeded || !awaitReconnectOutcome() ||
+            reconnectOutcome != static_cast<int>(NekoGui_sub::ManagedSession::ReconnectOutcome::Rejected) ||
             pid != beforeReconnect ||
             !controller.snapshot().value("controllerReady").toBool()) return 68;
         if (!store.commit(71, source, expired, validate, error)) return 69;
@@ -376,6 +405,58 @@ int main(int argc, char **argv) {
             group != 71 || !controller.snapshot().value("controllerReady").toBool() ||
             ownership.generation(Ownership::Owner::Managed) <= beforeReconnectGeneration) return 72;
         if (!store.load(71, saved, error) || saved.source != replacementSource) return 73;
+        if (!occupiedApi.listen(QHostAddress::LocalHost, 0) ||
+            !store.commit(71, failedCandidate, validate, error)) return 89;
+        const auto beforeRestoreGeneration = ownership.generation(Ownership::Owner::Managed);
+        completed = false;
+        reconnectOutcomeReceived = false;
+        if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, occupiedApi.serverPort(), 500) ||
+            !controller.busy() || controller.stop() || !await() || succeeded || !awaitReconnectOutcome() ||
+            reconnectOutcome != static_cast<int>(NekoGui_sub::ManagedSession::ReconnectOutcome::Restored) ||
+            controller.busy() || group != 71 || pid == 0 ||
+            status != static_cast<int>(NekoGui_sub::ManagedCoreProcess::State::Ready) ||
+            !controller.snapshot().value("controllerReady").toBool() ||
+            controller.snapshot().value("vpnConnected").toBool() ||
+            ownership.owner() != Ownership::Owner::Managed ||
+            ownership.generation(Ownership::Owner::Managed) <= beforeRestoreGeneration ||
+            !occupiedApi.isListening() || !store.load(71, saved, error) || saved.source != failedCandidate) return 90;
+        QTcpSocket controllerRestoredApi;
+        controllerRestoredApi.connectToHost(QHostAddress::LocalHost, apiPort);
+        if (!controllerRestoredApi.waitForConnected(1000)) return 91;
+        controllerRestoredApi.abort();
+        occupiedApi.close();
+        QTextStream(stdout) << "MANAGED_CONTROLLER_RESTORED_OUTCOME_READY_FALSE_SUCCESS_PASS\n";
+        // Reclaim the OLD API only after the old child exits. This real local
+        // listener makes rollback fail without injecting lifecycle/ownership state.
+        QTcpServer occupiedOldApi;
+        if (occupiedOldApi.listen(QHostAddress::LocalHost, apiPort) ||
+            !occupiedApi.listen(QHostAddress::LocalHost, 0)) return 92;
+        QTimer claimOldApi;
+        claimOldApi.setInterval(5);
+        QObject::connect(&claimOldApi, &QTimer::timeout, &app, [&] {
+            if (!occupiedOldApi.isListening()) occupiedOldApi.listen(QHostAddress::LocalHost, apiPort);
+        });
+        claimOldApi.start();
+        completed = false;
+        reconnectOutcomeReceived = false;
+        if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, occupiedApi.serverPort(), 2000) ||
+            !await() || succeeded || !awaitReconnectOutcome() ||
+            reconnectOutcome != static_cast<int>(NekoGui_sub::ManagedSession::ReconnectOutcome::RestoreFailed) ||
+            controller.busy() || group != -1 || pid != 0 ||
+            status != static_cast<int>(NekoGui_sub::ManagedCoreProcess::State::Failed) ||
+            controller.snapshot().value("controllerReady").toBool() ||
+            controller.snapshot().value("vpnConnected").toBool() ||
+            ownership.owner() != Ownership::Owner::None ||
+            !occupiedOldApi.isListening() || !occupiedApi.isListening() ||
+            !store.load(71, saved, error) || saved.source != failedCandidate) return 93;
+        claimOldApi.stop();
+        occupiedOldApi.close();
+        occupiedApi.close();
+        if (!portsClosed()) return 94;
+        completed = false;
+        if (!controller.start(snapshots.path(), 71, executable, mixedPort, apiPort, 10000) ||
+            !await() || !succeeded || pid == 0 || group != 71) return 95;
+        QTextStream(stdout) << "MANAGED_CONTROLLER_RESTORE_FAILED_CLEANUP_EXPLICIT_RECOVERY_PASS\n";
         if (!store.commit(71, source, validate, error)) return 74;
         QTextStream(stdout) << "MANAGED_CONTROLLED_RECONNECT_PREFLIGHT_PRESERVATION_PASS\n";
         completed = false;

@@ -693,11 +693,31 @@ refresh transaction or release gate.
 The controller runtime fixture also waits for the separately queued
 `reconnectFinished(int)` signal after `operationFinished`: successful
 replacement reports Applied; group/resource/expired-candidate rejection after
-operation dispatch reports Rejected. Invalid timeout is rejected before
-dispatch and emits no reconnect outcome. Real mihomo runtime, CTest6/6,
-parser39/39 and process fixtures PASS. Controller-level Restored/RestoreFailed,
-expired previous snapshot, double failure and forced/unconfirmed Stop remain
-NOT RUN.
+operation dispatch reports Rejected. Invalid timeout also reports Rejected:
+the controller dispatches it to the session (the previous no-outcome note was
+incorrect). Busy refusal before dispatch does not create another completion.
+
+Additional real-runtime fixtures now cover:
+- captured previous metadata naturally expires while Ready; a healthy stored
+  candidate fails on an occupied API port, and the expired previous profile is
+  NOT restored (false/Stopped, Failed/PID0/group-1/ownershipNone). Candidate
+  bytes survive and explicit Start/Stop on its healthy metadata succeeds;
+- controller replacement failure followed by successful restoration reports
+  false/Restored with Ready, old API available, advanced ownership generation,
+  vpnConnected=false and the candidate store unchanged;
+- a 5 ms UI-thread timer claims the old API port after graceful Stop, while a
+  second fixture listener occupies the candidate API. Replacement and restore
+  both fail, producing false/RestoreFailed, Failed/PID0/group-1/ownershipNone.
+  Both test listeners survive, candidate bytes are unchanged, and explicit
+  Start recovers after listeners close. This is a real port-binding fault with
+  a timing dependency, not a deterministic cleanup-failure injection.
+
+Managed fixture build and three consecutive full real-mihomo runtime runs
+PASS (forced=0). CTest6/6, production bridge/hook/reload/crash E2E, parser39/39
+and process fixtures PASS using existing production binaries; production code
+was unchanged and its ordinary build was not rerun. Forced/unconfirmed Stop,
+uncertain cleanup, exact prior routing data path and bridge reconnect remain
+NOT RUN. Loopback Ready is not a VPN-connected claim.
 
 ## Installation identity
 
