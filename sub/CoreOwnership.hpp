@@ -16,6 +16,9 @@ namespace NekoGui_sub {
         bool markUncertain(Owner owner, QString &error);
         // Caller must have confirmed that the owner's runtime is stopped.
         bool release(Owner owner, QString &error);
+        // Atomically evaluate a normal stop result. Unlike confirmed cleanup
+        // release(), a successful reply cannot clear pre-existing uncertainty.
+        bool finishStop(Owner owner, bool stopped, QString &error);
         [[nodiscard]] Owner owner() const;
         [[nodiscard]] State state() const;
     private:

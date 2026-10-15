@@ -46,6 +46,23 @@ namespace NekoGui_sub {
         return true;
     }
 
+    bool CoreOwnership::finishStop(Owner owner, bool stopped, QString &error) {
+        error.clear();
+        QMutexLocker lock(&mutex);
+        if (owner == Owner::None || active != owner) {
+            error = QStringLiteral("Stop result does not belong to the active runtime");
+            return false;
+        }
+        if (!stopped || current == State::Uncertain) {
+            current = State::Uncertain;
+            error = QStringLiteral("Core shutdown is unconfirmed; restart the application");
+            return false;
+        }
+        active = Owner::None;
+        current = State::Free;
+        return true;
+    }
+
     CoreOwnership::Owner CoreOwnership::owner() const {
         QMutexLocker lock(&mutex);
         return active;

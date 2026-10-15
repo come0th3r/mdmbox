@@ -340,6 +340,23 @@ These fixtures test the shared completion and isolated Qt queue, not the full
 GUI runOnUiThread/RPC sequence. Automatic recovery, daemon-generation proof
 and descendant/OS-resource cleanup remain pending.
 
+### Atomic stop versus fault notifications
+
+`CoreOwnership::finishStop` now evaluates owner, stop result and prior
+uncertainty under one mutex and performs the resulting state transition in
+the same critical section. LegacyCoreLifecycle delegates to this operation.
+This removes the previous separate state-check/release race where a fault
+could set Uncertain immediately before release cleared it. Independent
+confirmed-cleanup `release` remains unchanged.
+
+Windows production build PASS, CTest 6/6 PASS, parser 39/39 and production
+ExternalProcess cases=4 PASS, full mihomo smoke PASS exit 0/forced=0.
+`CORE_ATOMIC_STOP_FAULT_RACE_PASS iterations=200` races normal stop against
+markUncertain and verifies mutually exclusive stop-first Free or fault-first
+Legacy/Uncertain outcomes. This is a component concurrency fixture, not actual
+GUI RPC fault injection. Generation tokens and explicit recovery remain
+unimplemented; this change alone does not make recovery safe.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

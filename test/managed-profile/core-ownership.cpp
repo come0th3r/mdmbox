@@ -69,6 +69,38 @@ int main(int argc, char **argv) {
         LegacyCoreLifecycle::finishStop(foreign, false, false, error) ||
         foreign.owner() != Ownership::Owner::Managed || foreign.state() != Ownership::State::Held) return 21;
     QTextStream(stdout) << "LEGACY_STOP_OUTCOME_MATRIX_PASS\n";
+    // A stop reply and a crash notification must have one mutex-serialized
+    // outcome: Free if stop won, or Legacy/Uncertain if the fault won first.
+    for (int iteration = 0; iteration < 200; ++iteration) {
+        Ownership concurrent;
+        if (!concurrent.acquire(Ownership::Owner::Legacy, error)) return 22;
+        std::atomic<int> ready{0};
+        std::atomic<bool> go{false};
+        bool finished = false;
+        bool faulted = false;
+        auto awaitStart = [&] {
+            ++ready;
+            while (!go.load()) std::this_thread::yield();
+        };
+        std::thread stop([&] {
+            awaitStart();
+            QString e;
+            finished = LegacyCoreLifecycle::finishStop(concurrent, true, true, e);
+        });
+        std::thread fault([&] {
+            awaitStart();
+            QString e;
+            faulted = concurrent.markUncertain(Ownership::Owner::Legacy, e);
+        });
+        while (ready.load() != 2) std::this_thread::yield();
+        go = true;
+        stop.join();
+        fault.join();
+        if (finished == faulted) return 23;
+        if (finished && (concurrent.owner() != Ownership::Owner::None || concurrent.state() != Ownership::State::Free)) return 24;
+        if (faulted && (concurrent.owner() != Ownership::Owner::Legacy || concurrent.state() != Ownership::State::Uncertain)) return 25;
+    }
+    QTextStream(stdout) << "CORE_ATOMIC_STOP_FAULT_RACE_PASS iterations=200\n";
     QTextStream(stdout) << "CORE_SINGLE_OWNER_ARBITRATION_PASS\n";
     return 0;
 }
