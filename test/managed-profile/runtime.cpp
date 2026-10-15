@@ -290,6 +290,35 @@ int main(int argc, char **argv) {
             readySnapshot.value("groupId").toInt() != 71 || readySnapshot.contains("token") ||
             readySnapshot.contains("processId")) return 62;
         completed = false;
+        const auto beforeReconnect = pid;
+        const auto beforeReconnectGeneration = ownership.generation(Ownership::Owner::Managed);
+        if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, apiPort, 0) ||
+            !await() || succeeded || pid != beforeReconnect || !controller.snapshot().value("controllerReady").toBool()) return 65;
+        completed = false;
+        if (!controller.reconnect(snapshots.path(), 72, executable, mixedPort, apiPort, 10000) ||
+            !await() || succeeded || pid != beforeReconnect) return 66;
+        // A valid stored document may still be rejected by execution policy.
+        const QByteArray resourceCandidate = source + "rule-providers: {external: {type: http, url: 'https://example.invalid/rules', path: rules.yaml}}\n";
+        const auto parserOnly = [](const NekoGui_sub::ManagedProfile &, QString &) { return true; };
+        if (!store.commit(71, resourceCandidate, parserOnly, error)) return 67;
+        completed = false;
+        if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, apiPort, 10000) ||
+            !await() || succeeded || pid != beforeReconnect || !controller.snapshot().value("controllerReady").toBool()) return 68;
+        if (!store.commit(71, source, expired, validate, error)) return 69;
+        completed = false;
+        if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, apiPort, 10000) ||
+            !await() || succeeded || pid != beforeReconnect) return 70;
+        const auto replacementSource = source + "# refreshed synthetic snapshot\n";
+        if (!store.commit(71, replacementSource, validate, error)) return 71;
+        completed = false;
+        if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, apiPort, 10000) ||
+            !controller.busy() || controller.stop() || !await() || !succeeded || pid == 0 ||
+            group != 71 || !controller.snapshot().value("controllerReady").toBool() ||
+            ownership.generation(Ownership::Owner::Managed) <= beforeReconnectGeneration) return 72;
+        if (!store.load(71, saved, error) || saved.source != replacementSource) return 73;
+        if (!store.commit(71, source, validate, error)) return 74;
+        QTextStream(stdout) << "MANAGED_CONTROLLED_RECONNECT_PREFLIGHT_PRESERVATION_PASS\n";
+        completed = false;
         if (!controller.stop() || !await() || !succeeded || group != -1 || pid != 0 || !portsClosed()) return 53;
         if (controller.snapshot().value("controllerReady").toBool() ||
             controller.snapshot().value("state").toString() != "stopped") return 63;

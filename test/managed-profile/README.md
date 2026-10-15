@@ -621,6 +621,31 @@ exit0/forced0. Snapshot callback/event race branch has not been forced
 deterministically. Concurrent refresh response ordering, pending reload,
 duplicate/reused request IDs, no-YAML and normal startup remain NOT RUN.
 
+### Controlled reconnect foundation (worker/session only)
+
+ManagedSession/Controller reconnect the same active Ready group to an already
+stored snapshot. Timeout/group/live gates, snapshot load, metadata expiry and
+exhaustion, reviewed loopback projection and pinned validation precede Stop.
+Preflight rejection leaves the old process running. The captured candidate is
+used after confirmed graceful Stop without rereading storage. Forced or
+unconfirmed Stop refuses replacement; replacement failure has no automatic
+rollback/retry. The controller serializes reconnect and restarts monitoring
+even when a preflight refusal leaves the previous session active.
+
+Windows production/fixture builds PASS, CTest6/6 PASS, parser39/39/process
+fixtures PASS, production bridge/hook/reload/crash E2E PASS and full mihomo
+smoke PASS exit0/forced0. Runtime marker:
+MANAGED_CONTROLLED_RECONNECT_PREFLIGHT_PRESERVATION_PASS. Checks include invalid
+timeout, wrong group, resource policy and expired metadata preserving PID/Ready;
+successful reconnect to a refreshed comment snapshot advances ownership
+generation, reaches Ready, preserves source and gracefully stops.
+
+No UI/bridge reconnect command or automatic downloader integration is added.
+Actual endpoint/data-path changes, failed executable validation, forced or
+unconfirmed Stop injection, post-Stop replacement failure, concurrent snapshot
+mutation and expiry during preflight are NOT RUN. Last-working runtime rollback
+is not implemented; this does not complete the refresh/apply release gate.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

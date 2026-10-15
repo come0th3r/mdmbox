@@ -17,6 +17,8 @@ namespace NekoGui_sub {
         bool start(const QString &directory, int groupId, const QString &executable,
                    int mixedPort, int apiPort, int timeoutMs);
         bool stop();
+        bool reconnect(const QString &directory, int groupId, const QString &executable,
+                       int mixedPort, int apiPort, int timeoutMs);
         bool busy() const { return pending; }
         int state() const { return lastState; }
         int groupId() const { return lastGroup; }

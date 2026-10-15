@@ -100,6 +100,24 @@ namespace NekoGui_sub {
         return true;
     }
 
+    bool ManagedSessionController::reconnect(const QString &directory, int groupId, const QString &executable,
+                                            int mixedPort, int apiPort, int timeoutMs) {
+        if (pending) return false;
+        pending = true;
+        QMetaObject::invokeMethod(worker, [=] {
+            ensureSession();
+            executing = true;
+            QString error;
+            const bool success = session->reconnect(ManagedProfileStore(directory), groupId, executable,
+                                                    mixedPort, apiPort, timeoutMs, error);
+            executing = false;
+            // A preflight refusal may leave the old Ready session active.
+            if (session->groupId() >= 0) monitor->start();
+            publish(success, error);
+        }, Qt::QueuedConnection);
+        return true;
+    }
+
     bool ManagedSessionController::stop() {
         if (pending) return false;
         pending = true;
