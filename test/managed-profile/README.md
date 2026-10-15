@@ -571,6 +571,32 @@ Production hookPage helper/CustomEvent/visible HTML, ordinary startup with a
 legacy daemon, crash-to-JS, navigation/reload, destruction while pending,
 no-YAML and OS proxy/DNS/routes snapshots remain NOT RUN.
 
+### Production hook, JS context replacement and crash delivery
+
+The bridge fixture now uses the shell's actual QWebEngineView/page/channel and
+production hookPage helper, rather than constructing a separate QWebChannel.
+It verifies the profile is off-the-record and loads only synthetic local HTML.
+Start/Stop use window.mdmboxManaged; acknowledgements and runtime events pass
+through the production CustomEvent listeners. Repeated hookPage calls must not
+duplicate events. While the core is active, setHtml replaces the JS context;
+the replacement page attaches listeners without implicitly restarting the core.
+
+On Windows a held process handle terminates the actual managed child with
+exit42. The new JS context must receive one runtimeFailed event with Failed
+and controllerReady=false; C++ verifies PID0 and cleared managed guards. Manual
+JS restart then reaches Ready and Stop closes ports/frees ownership. Source
+bytes remain unchanged; ready/crash/stopped event counters reject duplicates.
+
+Fixture build PASS, E2E PASS twice:
+MANAGED_PRODUCTION_HOOK_CUSTOM_EVENT_RELOAD_PASS and
+MANAGED_PRODUCTION_CRASH_JS_FAILED_RESTART_PASS. CTest6/6 PASS, parser39/39 and
+process fixtures PASS, full real-mihomo smoke PASS exit0/forced0.
+Only test code changed; ordinary production build was not rerun in this step.
+This tests setHtml context replacement, not navigation/back/forward or snapshot
+resync after a missed event. Normal daemon startup, visible design UI, pending
+destruction, request-correlated completions, no-YAML and OS snapshots remain
+NOT RUN. GPU/font/offscreen/libpng warnings remain.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under
