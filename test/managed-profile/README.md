@@ -768,6 +768,26 @@ fixtures PASS. Bridge reconnect is not exposed. Controller StopFailed,
 reentrant signal-handler command submission, requestId reuse/replay and
 unconfirmed cleanup remain NOT RUN. Ready still means loopback API only.
 
+### Completion delivery reentrancy boundary
+
+Controller busy() includes owner-thread completion delivery, not just worker
+execution. Start/Stop/reconnect called directly from statusChanged,
+reconnectCompleted, reconnectFinished or operationFinished are refused until
+the entire completion notification chain returns. No extra completion is
+created for those refusals. Queue a follow-up command to run after delivery.
+The immutable completion snapshot describes finished execution (busy=false),
+while busy() is temporarily true during synchronous notification dispatch.
+
+The real-mihomo fixture attempts all three commands from each of the four
+signals on a rejected reconnect. It checks four callbacks, zero accepted
+reentrant commands, one correctly correlated completion, unchanged PID and
+ownership generation, then normal explicit Stop acceptance after delivery.
+MANAGED_COMPLETION_REENTRANT_COMMAND_REFUSAL_PASS checks=4.
+Windows ordinary/fixture builds, full real runtime, CTest6/6, production
+bridge/hook/reload/crash E2E, parser39/39 and process fixtures PASS.
+Nested event-loop pumping/destruction inside notification observers is not
+covered. Unconfirmed cleanup and bridge reconnect remain NOT RUN.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

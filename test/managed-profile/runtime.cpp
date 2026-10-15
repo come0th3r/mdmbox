@@ -525,6 +525,43 @@ int main(int argc, char **argv) {
         QTextStream(stdout) << "MANAGED_CONTROLLER_RESTORE_FAILED_CLEANUP_EXPLICIT_RECOVERY_PASS\n";
         if (!store.commit(71, source, validate, error)) return 74;
         QTextStream(stdout) << "MANAGED_CONTROLLED_RECONNECT_PREFLIGHT_PRESERVATION_PASS\n";
+        // Direct signal observers must not accept a new command before ALL
+        // compatibility notifications for the completed operation are delivered.
+        int reentrantChecks = 0;
+        bool reentrantSafe = true;
+        const auto rejectReentrant = [&] {
+            ++reentrantChecks;
+            reentrantSafe = controller.busy() && reentrantSafe;
+            if (controller.start(snapshots.path(), 71, executable, mixedPort, apiPort, 10000)) reentrantSafe = false;
+            if (controller.stop()) reentrantSafe = false;
+            if (controller.reconnect(snapshots.path(), 71, executable, mixedPort, apiPort, 0, "reentrant-refused"))
+                reentrantSafe = false;
+        };
+        const auto statusReentry = QObject::connect(&controller,
+            &NekoGui_sub::ManagedSessionController::statusChanged, &app, rejectReentrant);
+        const auto resultReentry = QObject::connect(&controller,
+            &NekoGui_sub::ManagedSessionController::reconnectCompleted, &app, rejectReentrant);
+        const auto compatibilityReentry = QObject::connect(&controller,
+            &NekoGui_sub::ManagedSessionController::reconnectFinished, &app, rejectReentrant);
+        const auto operationReentry = QObject::connect(&controller,
+            &NekoGui_sub::ManagedSessionController::operationFinished, &app, rejectReentrant);
+        completed = false;
+        reconnectOutcomeReceived = false;
+        const auto beforeReentryCompletions = reconnectCompletions;
+        const auto beforeReentryGeneration = ownership.generation(Ownership::Owner::Managed);
+        const auto beforeReentryPid = pid;
+        if (!controller.reconnect(snapshots.path(), 71, executable, mixedPort, apiPort, 0, "reentry-test") ||
+            !await() || succeeded || !awaitReconnectOutcome() || !reentrantSafe || reentrantChecks != 4 ||
+            controller.busy() || reconnectCompletions != beforeReentryCompletions + 1 ||
+            completedRequestId != "reentry-test" ||
+            correlatedOutcome != static_cast<int>(NekoGui_sub::ManagedSession::ReconnectOutcome::Rejected) ||
+            correlatedSnapshot.value("busy").toBool() || correlatedSnapshot != controller.snapshot() ||
+            pid != beforeReentryPid || ownership.generation(Ownership::Owner::Managed) != beforeReentryGeneration) return 101;
+        QObject::disconnect(statusReentry);
+        QObject::disconnect(resultReentry);
+        QObject::disconnect(compatibilityReentry);
+        QObject::disconnect(operationReentry);
+        QTextStream(stdout) << "MANAGED_COMPLETION_REENTRANT_COMMAND_REFUSAL_PASS checks=4\n";
         completed = false;
         if (!controller.stop() || !await() || !succeeded || group != -1 || pid != 0 || !portsClosed()) return 53;
         if (controller.snapshot().value("controllerReady").toBool() ||

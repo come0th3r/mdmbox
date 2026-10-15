@@ -49,6 +49,7 @@ namespace NekoGui_sub {
         const auto group = session->groupId();
         const auto pid = session->processId();
         QMetaObject::invokeMethod(this, [this, state, group, pid, success, error, outcome, requestId] {
+            deliveringCompletion = true;
             pending = false;
             lastState = static_cast<int>(state);
             lastGroup = group;
@@ -61,6 +62,7 @@ namespace NekoGui_sub {
                 emit reconnectFinished(static_cast<int>(outcome));
             }
             emit operationFinished(success, error);
+            deliveringCompletion = false;
         }, Qt::QueuedConnection);
     }
 
@@ -92,7 +94,7 @@ namespace NekoGui_sub {
 
     bool ManagedSessionController::start(const QString &directory, int groupId, const QString &executable,
                                          int mixedPort, int apiPort, int timeoutMs) {
-        if (pending) return false;
+        if (busy()) return false;
         pending = true;
         QMetaObject::invokeMethod(worker, [=] {
             ensureSession();
@@ -109,7 +111,7 @@ namespace NekoGui_sub {
 
     bool ManagedSessionController::reconnect(const QString &directory, int groupId, const QString &executable,
                                             int mixedPort, int apiPort, int timeoutMs, const QString &requestId) {
-        if (pending || requestId.size() > 128) return false;
+        if (busy() || requestId.size() > 128) return false;
         pending = true;
         QMetaObject::invokeMethod(worker, [=] {
             ensureSession();
@@ -127,7 +129,7 @@ namespace NekoGui_sub {
     }
 
     bool ManagedSessionController::stop() {
-        if (pending) return false;
+        if (busy()) return false;
         pending = true;
         QMetaObject::invokeMethod(worker, [this] {
             ensureSession();

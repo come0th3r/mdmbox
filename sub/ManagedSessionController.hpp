@@ -19,7 +19,7 @@ namespace NekoGui_sub {
         bool stop();
         bool reconnect(const QString &directory, int groupId, const QString &executable,
                        int mixedPort, int apiPort, int timeoutMs, const QString &requestId = {});
-        bool busy() const { return pending; }
+        bool busy() const { return pending || deliveringCompletion; }
         int state() const { return lastState; }
         int groupId() const { return lastGroup; }
         qint64 processId() const { return lastPid; }
@@ -41,6 +41,7 @@ namespace NekoGui_sub {
         QTimer *monitor = nullptr; // Worker-owned.
         bool executing = false; // Worker-only; protects nested readiness loops.
         bool pending = false;
+        bool deliveringCompletion = false; // Owner thread; reject reentrant commands during notifications.
         int lastState = static_cast<int>(ManagedCoreProcess::State::Stopped);
         int lastGroup = -1;
         qint64 lastPid = 0;
