@@ -1630,6 +1630,10 @@ void MdmBoxShellWindow::triggerConnectToggle() {
     refreshPageState();
 }
 
+bool MdmBoxShellWindow::hasLocalShell() const {
+    return QFile::exists(htmlPathForPage(QStringLiteral("home")));
+}
+
 QJsonObject MdmBoxShellWindow::managedLoopbackStartResult(int groupId, const QString &requestId) {
     if (auto *mw = GetMainWindow()) return mw->managedLoopbackStartResult(groupId, requestId);
     return {{QStringLiteral("schemaVersion"), 1},

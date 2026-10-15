@@ -1,6 +1,7 @@
 #include "mdmbox_shell_host.h"
 
 #include "mdmbox_shell_window.h"
+#include "ui/mainwindow.h"
 
 namespace {
 
@@ -19,6 +20,16 @@ MdmBoxShellWindow *GetMdmBoxShellWindow() {
 
 void ShowMdmBoxShell() {
     auto *window = ensureWindow();
+    // Source archives may not include the optional HTML shell. Keep the
+    // existing native interface reachable instead of presenting a blank view.
+    if (!window->hasLocalShell()) {
+        if (auto *main = GetMainWindow()) {
+            main->show();
+            main->raise();
+            main->activateWindow();
+        }
+        return;
+    }
     window->show();
     window->raise();
     window->activateWindow();

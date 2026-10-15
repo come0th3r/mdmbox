@@ -15,6 +15,7 @@ class MdmBoxShellWindow final : public QMainWindow {
     Q_OBJECT
 
 public:
+    bool hasLocalShell() const;
     explicit MdmBoxShellWindow(QWidget *parent = nullptr, bool loadContent = true);
     ~MdmBoxShellWindow() override;
 
