@@ -6,6 +6,7 @@
 #include "db/traffic/TrafficLooper.hpp"
 #include "rpc/gRPC.h"
 #include "sub/LegacyCoreLifecycle.hpp"
+#include "sys/TrackedProcessCleanup.hpp"
 #include "ui/widget/MessageBoxTimer.h"
 
 #include <QTimer>
@@ -450,15 +451,8 @@ void MainWindow::neko_stop(bool crash, bool sem) {
         auto externalStop = std::make_shared<ExternalStopResult>();
         runOnUiThread(
             [=] {
-                auto &processes = NekoGui_sys::running_ext;
-                for (auto it = processes.begin(); it != processes.end();) {
-                    auto extC = *it;
-                    extC->Kill();
-                    // Keep the handle tracked when Kill's wait did not confirm exit.
-                    if (extC->state() == QProcess::NotRunning) it = processes.erase(it);
-                    else ++it;
-                }
-                externalStop->stopped = processes.empty();
+                externalStop->stopped = NekoGui_sys::cleanupTrackedProcesses(
+                    NekoGui_sys::running_ext, [](NekoGui_sys::ExternalProcess &process) { process.Kill(); });
                 externalStop->completed.release();
             },
             DS_cores);

@@ -287,6 +287,24 @@ real-mihomo runtime PASS exit 0, forced=0. Actual GUI delayed cleanup, timeout
 and RPC fault injection, real legacy external-child fixtures and automatic
 recovery remain NOT RUN / pending.
 
+### Real-child tracking cleanup fixtures
+
+`process-cleanup` uses the same `cleanupTrackedProcesses` algorithm as the
+production DS_cores callback. It launches its own executable as a child with
+a 10-second self-exit deadline (no shell/network). An injected no-op stopper
+retains the live PID and tracked handle; `finishStop` then retains Legacy in
+Uncertain and blocks Managed. Real QProcess kill/wait confirms NotRunning/PID0
+and removes the entry. Prior uncertainty stays blocked; a separate normal
+cleanup permits switching. Mixed stopped/live entries, empty tracking and
+null entries are covered; null tracking fails closed.
+
+Windows production build PASS, CTest **5/5 PASS**, parser **39/39 PASS**, full
+real-mihomo runtime PASS exit 0/forced=0. Direct runner prints
+`TRACKED_LIVE_CHILD_REFUSAL_PASS`, `TRACKED_CHILD_CONFIRMED_EXIT_PASS` and
+`TRACKED_CHILD_NORMAL_SWITCH_PASS`. The stopper is injected: this does not
+test actual ExternalProcess::Kill, queued GUI delays/timeouts, descendant
+trees or automatic recovery. No system proxy, TUN, DNS or routes are enabled.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under
