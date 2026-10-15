@@ -376,6 +376,24 @@ ownership and is not yet bound to the daemon process that emitted the event.
 These counters do not prove process exit, authenticate a callback or authorize
 automatic recovery. Daemon event generations and GUI/RPC fault E2E are pending.
 
+### Daemon event generation binding
+
+CoreProcess now advances an atomic launch generation before starting a stopped
+daemon. CoreCrashed carries daemon generation and ownership generation captured
+at event emission; CoreStarted carries daemon generation. GUI consumers parse
+the payload and reject non-current generations. Crash handling uses the captured
+ownership generation rather than looking up a potentially newer owner. Delayed
+restart callbacks reject stale generations; Restart refuses to launch while the
+previous QProcess exit is unconfirmed.
+
+Windows final production build PASS (initial captured-state shadowing compile
+error fixed), CTest6/6 PASS, `DAEMON_STALE_EVENT_GENERATION_PASS`, parser39/39
+plus ExternalProcess4 PASS, real-mihomo runtime PASS exit0/forced0. The generation
+fixture is component-level, not real daemon crash/GUI-queue E2E. The GUI generation
+check and subsequent work are not a single cross-thread transaction. External
+proxy Crashed messages remain unversioned. Automatic recovery and independently
+confirmed daemon/descendant/OS cleanup remain pending.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

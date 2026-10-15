@@ -769,10 +769,22 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
     } else if (sender == "ExternalProcess") {
         if (info == "Crashed") {
             neko_stop();
-        } else if (info == "CoreCrashed") {
-            neko_stop(true);
-        } else if (info.startsWith("CoreStarted")) {
-            neko_start(info.split(",")[1].toInt());
+        } else if (info.startsWith("CoreCrashed,") || info.startsWith("CoreStarted,")) {
+            const auto parts = info.split(',');
+            if (parts.size() != 3) return;
+            bool generationOk = false;
+            const bool crashed = parts[0] == "CoreCrashed";
+            const auto generation = parts[crashed ? 1 : 2].toULongLong(&generationOk);
+            if (!generationOk || !core_process->acceptsGeneration(generation)) return;
+            if (crashed) {
+                bool ownerOk = false;
+                const auto ownershipGeneration = parts[2].toULongLong(&ownerOk);
+                if (ownerOk && ownershipGeneration != 0) neko_stop(true, false, ownershipGeneration);
+            } else {
+                bool profileOk = false;
+                const auto id = parts[1].toInt(&profileOk);
+                if (profileOk && id >= 0) neko_start(id);
+            }
         }
     }
 }

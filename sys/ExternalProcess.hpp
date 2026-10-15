@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <QProcess>
+#include "CoreProcessGeneration.hpp"
 
 namespace NekoGui_sys {
     class ExternalProcess : public QProcess {
@@ -35,11 +36,13 @@ namespace NekoGui_sys {
         void Start() override;
 
         void Restart();
+        [[nodiscard]] bool acceptsGeneration(quint64 generation) const { return generationCounter.accepts(generation); }
 
         int start_profile_when_core_is_up = -1;
 
     private:
         bool show_stderr = false;
+        CoreProcessGeneration generationCounter;
         bool failed_to_start = false;
         bool restarting = false;
     };

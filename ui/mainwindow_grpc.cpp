@@ -434,11 +434,16 @@ void MainWindow::neko_start(int _id) {
     });
 }
 
-void MainWindow::neko_stop(bool crash, bool sem) {
-    const auto ownershipGeneration = core_ownership.generation(NekoGui_sub::CoreOwnership::Owner::Legacy);
+void MainWindow::neko_stop(bool crash, bool sem, quint64 crashOwnershipGeneration) {
+    const auto ownershipGeneration = crash ? crashOwnershipGeneration
+        : core_ownership.generation(NekoGui_sub::CoreOwnership::Owner::Legacy);
     if (crash) {
         QString ignored;
-        if (ownershipGeneration != 0) core_ownership.markUncertain(NekoGui_sub::CoreOwnership::Owner::Legacy, ignored, ownershipGeneration);
+        if (ownershipGeneration == 0 ||
+            !core_ownership.markUncertain(NekoGui_sub::CoreOwnership::Owner::Legacy, ignored, ownershipGeneration)) {
+            if (sem) sem_stopped.release();
+            return;
+        }
     }
     auto id = NekoGui::dataStore->started_id;
     if (id < 0) {

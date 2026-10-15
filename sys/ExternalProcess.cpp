@@ -1,5 +1,6 @@
 #include "ExternalProcess.hpp"
 #include "main/NekoGui.hpp"
+#include "sub/CoreOwnership.hpp"
 
 #include <QTimer>
 #include <QDir>
@@ -84,7 +85,8 @@ namespace NekoGui_sys {
                     // The core really started
                     NekoGui::dataStore->core_running = true;
                     if (start_profile_when_core_is_up >= 0) {
-                        MW_dialog_message("ExternalProcess", "CoreStarted," + Int2String(start_profile_when_core_is_up));
+                        MW_dialog_message("ExternalProcess", QStringLiteral("CoreStarted,%1,%2")
+                            .arg(start_profile_when_core_is_up).arg(generationCounter.current()));
                         start_profile_when_core_is_up = -1;
                     }
                 } else if (log.contains("failed to serve")) {
@@ -120,7 +122,9 @@ namespace NekoGui_sys {
                 if (failed_to_start) return; // no retry
                 if (restarting) return;
 
-                MW_dialog_message("ExternalProcess", "CoreCrashed");
+                const auto ownershipGeneration = NekoGui_sub::CoreOwnership::shared().generation(NekoGui_sub::CoreOwnership::Owner::Legacy);
+                MW_dialog_message("ExternalProcess", QStringLiteral("CoreCrashed,%1,%2")
+                    .arg(generationCounter.current()).arg(ownershipGeneration));
 
                 // Retry rate limit
                 if (coreRestartTimer.isValid()) {
@@ -136,12 +140,20 @@ namespace NekoGui_sys {
                 // Restart
                 start_profile_when_core_is_up = NekoGui::dataStore->started_id;
                 MW_show_log("[Error] " + QObject::tr("Core exited, restarting."));
-                setTimeout([=] { Restart(); }, this, 1000);
+                const auto failedGeneration = generationCounter.current();
+                setTimeout([=] {
+                    if (generationCounter.accepts(failedGeneration) && this->state() == QProcess::NotRunning) Restart();
+                }, this, 1000);
             }
         });
     }
 
     void CoreProcess::Start() {
+        if (started || state() != QProcess::NotRunning) return;
+        if (!generationCounter.advance()) {
+            MW_show_log(QStringLiteral("Core process generation exhausted; restart the application"));
+            return;
+        }
         show_stderr = false;
         // cwd: same as GUI, at ./config
         ExternalProcess::Start();
@@ -152,6 +164,11 @@ namespace NekoGui_sys {
         restarting = true;
         QProcess::kill();
         QProcess::waitForFinished(500);
+        if (state() != QProcess::NotRunning) {
+            restarting = false;
+            MW_show_log(QStringLiteral("Core restart refused: previous process exit is unconfirmed"));
+            return;
+        }
         ExternalProcess::started = false;
         Start();
         restarting = false;

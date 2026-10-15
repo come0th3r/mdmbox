@@ -1,5 +1,6 @@
 #include "../../sub/CoreOwnership.hpp"
 #include "../../sub/LegacyCoreLifecycle.hpp"
+#include "../../sys/CoreProcessGeneration.hpp"
 #include <QCoreApplication>
 #include <QTextStream>
 #include <atomic>
@@ -121,6 +122,19 @@ int main(int argc, char **argv) {
             generations.acquire(owner, error, &rejected) || rejected != 0) return 29;
     }
     QTextStream(stdout) << "CORE_STALE_GENERATION_REFUSAL_PASS\n";
+    NekoGui_sys::CoreProcessGeneration daemon;
+    if (daemon.accepts(0) || daemon.current() != 0 || !daemon.advance()) return 30;
+    const auto oldDaemon = daemon.current();
+    if (!daemon.accepts(oldDaemon) || !daemon.advance() || daemon.accepts(oldDaemon) ||
+        daemon.accepts(0) || !daemon.accepts(daemon.current())) return 31;
+    Ownership eventOwnership;
+    quint64 oldOwner = 0, currentOwner = 0;
+    if (!eventOwnership.acquire(Ownership::Owner::Legacy, error, &oldOwner) ||
+        !eventOwnership.release(Ownership::Owner::Legacy, error, oldOwner) ||
+        !eventOwnership.acquire(Ownership::Owner::Legacy, error, &currentOwner) ||
+        eventOwnership.markUncertain(Ownership::Owner::Legacy, error, oldOwner) ||
+        eventOwnership.state() != Ownership::State::Held) return 32;
+    QTextStream(stdout) << "DAEMON_STALE_EVENT_GENERATION_PASS\n";
     QTextStream(stdout) << "CORE_SINGLE_OWNER_ARBITRATION_PASS\n";
     return 0;
 }
