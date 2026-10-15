@@ -258,6 +258,11 @@ int main(int argc, char **argv) {
     QTextStream(stdout) << "MANAGED_SNAPSHOT_SESSION_READINESS_STOP_PASS\n";
     {
         NekoGui_sub::ManagedSessionController controller;
+        const auto initialSnapshot = controller.snapshot();
+        if (initialSnapshot.value("schemaVersion").toInt() != 1 ||
+            initialSnapshot.value("state").toString() != "stopped" ||
+            initialSnapshot.value("scope").toString() != "loopback-only" ||
+            initialSnapshot.value("vpnConnected").toBool() || initialSnapshot.size() != 8) return 61;
         bool completed = false, succeeded = false;
         int status = -1, group = -1;
         qint64 pid = 0;
@@ -279,8 +284,15 @@ int main(int argc, char **argv) {
             !controller.busy() || controller.stop() ||
             !await() || !succeeded || controller.busy() || group != 71 || pid == 0 ||
             status != static_cast<int>(NekoGui_sub::ManagedCoreProcess::State::Ready)) return 52;
+        const auto readySnapshot = controller.snapshot();
+        if (readySnapshot.value("state").toString() != "ready" ||
+            !readySnapshot.value("controllerReady").toBool() || readySnapshot.value("vpnConnected").toBool() ||
+            readySnapshot.value("groupId").toInt() != 71 || readySnapshot.contains("token") ||
+            readySnapshot.contains("processId")) return 62;
         completed = false;
         if (!controller.stop() || !await() || !succeeded || group != -1 || pid != 0 || !portsClosed()) return 53;
+        if (controller.snapshot().value("controllerReady").toBool() ||
+            controller.snapshot().value("state").toString() != "stopped") return 63;
         completed = false;
         if (!controller.start(snapshots.path(), 999, executable, mixedPort, apiPort, 10000) ||
             !await() || succeeded || pid != 0) return 54;
@@ -307,6 +319,9 @@ int main(int argc, char **argv) {
         if (!runtimeFailed || controller.state() != static_cast<int>(NekoGui_sub::ManagedCoreProcess::State::Failed) ||
             controller.processId() != 0 || controller.groupId() != -1 || controller.busy() ||
             !portsClosed() || ownership.owner() != Ownership::Owner::None) return 59;
+        if (controller.snapshot().value("state").toString() != "failed" ||
+            controller.snapshot().value("controllerReady").toBool() ||
+            controller.snapshot().value("vpnConnected").toBool()) return 64;
         completed = false;
         if (!controller.start(snapshots.path(), 71, executable, mixedPort, apiPort, 10000) ||
             !await() || !succeeded) return 60;
@@ -315,5 +330,6 @@ int main(int argc, char **argv) {
     } // Controller destruction must stop and destroy session on its worker.
     if (!portsClosed() || ownership.owner() != Ownership::Owner::None) return 56;
     QTextStream(stdout) << "MANAGED_ASYNC_WORKER_STATUS_SHUTDOWN_PASS\n";
+    QTextStream(stdout) << "MANAGED_READONLY_SNAPSHOT_CONTRACT_PASS\n";
     return 0;
 }

@@ -466,6 +466,22 @@ cached PID0/group-1, closed ports, ownershipNone and successful manual restart.
 Visible application/bridge wiring, cancellation, API/data-path health checks
 and legacy recovery remain pending.
 
+### Read-only managed shell snapshot
+
+Controller exposes schema1 JSON with available, loopback-only scope, state,
+busy, groupId, controllerReady and vpnConnected=false. MainWindow forwards it
+as buildShellState.managedRuntime; legacy connected remains unchanged. The
+fallback reports unavailable when no controller is compiled/installed. No PID,
+token, source or executable path is exported.
+
+Windows production build PASS, CTest6/6 PASS, parser39/39/process fixtures PASS,
+full real-mihomo smoke PASS exit0/forced0.
+`MANAGED_READONLY_SNAPSHOT_CONTRACT_PASS` checks stopped/ready/stopped/failed
+JSON, schema, scope, field count, no token/PID and no VPN-connected claim.
+Actual JS/QWebChannel delivery, visible rendering and no-YAML build are NOT RUN.
+ControllerReady is initial authenticated readiness plus process-exit monitoring,
+not ongoing API or data-path health. No start/stop bridge commands are added.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under

@@ -176,6 +176,7 @@ QJsonObject buildShellState() {
     const auto signal = mw ? mw->shellSignalStats() : QJsonObject{};
 
     state.insert(QStringLiteral("connected"), connected);
+    state.insert(QStringLiteral("managedRuntime"), mw ? mw->shellManagedRuntimeState() : QJsonObject{});
     state.insert(QStringLiteral("selectedId"), selectedId);
     state.insert(QStringLiteral("selectedName"), name);
     state.insert(QStringLiteral("selectedAddress"), address);

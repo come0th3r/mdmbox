@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QThread>
 #include <QTimer>
+#include <QJsonObject>
 #include "ManagedSession.hpp"
 
 namespace NekoGui_sub {
@@ -20,6 +21,7 @@ namespace NekoGui_sub {
         int state() const { return lastState; }
         int groupId() const { return lastGroup; }
         qint64 processId() const { return lastPid; }
+        QJsonObject snapshot() const;
     signals:
         // int is ManagedCoreProcess::State; Ready is NOT VPN connected.
         void statusChanged(int state, int groupId, qint64 processId);

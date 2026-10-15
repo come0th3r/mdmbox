@@ -1,6 +1,26 @@
 #include "ManagedSessionController.hpp"
 
 namespace NekoGui_sub {
+    QJsonObject ManagedSessionController::snapshot() const {
+        QString stateName;
+        switch (static_cast<ManagedCoreProcess::State>(lastState)) {
+        case ManagedCoreProcess::State::Stopped: stateName = QStringLiteral("stopped"); break;
+        case ManagedCoreProcess::State::Starting: stateName = QStringLiteral("starting"); break;
+        case ManagedCoreProcess::State::Running: stateName = QStringLiteral("running"); break;
+        case ManagedCoreProcess::State::Ready: stateName = QStringLiteral("ready"); break;
+        case ManagedCoreProcess::State::Stopping: stateName = QStringLiteral("stopping"); break;
+        case ManagedCoreProcess::State::Failed: stateName = QStringLiteral("failed"); break;
+        }
+        return {{QStringLiteral("schemaVersion"), 1},
+                {QStringLiteral("available"), true},
+                {QStringLiteral("scope"), QStringLiteral("loopback-only")},
+                {QStringLiteral("state"), stateName},
+                {QStringLiteral("busy"), pending},
+                {QStringLiteral("groupId"), lastGroup},
+                {QStringLiteral("controllerReady"), !pending && lastState == static_cast<int>(ManagedCoreProcess::State::Ready)},
+                {QStringLiteral("vpnConnected"), false}};
+    }
+
     ManagedSessionController::ManagedSessionController(QObject *parent) : QObject(parent), worker(new QObject) {
         worker->moveToThread(&workerThread);
         connect(&workerThread, &QThread::finished, worker, &QObject::deleteLater);

@@ -78,6 +78,7 @@ public:
     [[nodiscard]] int shellLatencyMs() const;
 
     [[nodiscard]] QJsonObject shellSignalStats() const;
+    [[nodiscard]] QJsonObject shellManagedRuntimeState() const;
 
     [[nodiscard]] QString shellLogText() const;
 

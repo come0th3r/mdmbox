@@ -511,6 +511,20 @@ QString MainWindow::shellTrafficText() const {
     return traffic_update_cache.trimmed();
 }
 
+QJsonObject MainWindow::shellManagedRuntimeState() const {
+#ifndef NKR_NO_YAML
+    if (managed_session_controller) return managed_session_controller->snapshot();
+#endif
+    return {{QStringLiteral("schemaVersion"), 1},
+            {QStringLiteral("available"), false},
+            {QStringLiteral("scope"), QStringLiteral("loopback-only")},
+            {QStringLiteral("state"), QStringLiteral("unavailable")},
+            {QStringLiteral("busy"), false},
+            {QStringLiteral("groupId"), -1},
+            {QStringLiteral("controllerReady"), false},
+            {QStringLiteral("vpnConnected"), false}};
+}
+
 int MainWindow::shellLatencyMs() const {
     if (running != nullptr) return running->latency;
     if (NekoGui::dataStore && NekoGui::dataStore->selected_id >= 0 && NekoGui::profileManager) {
