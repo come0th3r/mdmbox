@@ -65,6 +65,12 @@ namespace NekoGui_sub {
         // the store between stopping the old child and launching the replacement.
         if (!ManagedRuntimePolicy::projectLoopback(candidate, mixedPort, apiPort, QByteArray(64, 'a'), projected, error) ||
             !MihomoValidator::validate(executable, projected, error)) return false;
+        // Validation can take time. Never intentionally stop a working child
+        // for a candidate whose known subscription has expired meanwhile.
+        if (metadata.expired(QDateTime::currentSecsSinceEpoch()) || metadata.exhausted()) {
+            error = QStringLiteral("Managed subscription expired during reconnect preflight");
+            return false;
+        }
         if (!stop(error)) return false; // Forced/unconfirmed Stop must not restart.
         // No automatic rollback/retry if replacement launch/readiness fails.
         return startProfile(candidate, groupId, executable, mixedPort, apiPort, readinessTimeoutMs, error);

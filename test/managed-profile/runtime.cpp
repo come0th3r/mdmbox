@@ -255,6 +255,27 @@ int main(int argc, char **argv) {
     if (!store.commit(73, source, exhausted, validate, error) ||
         session.start(store, 73, executable, mixedPort, apiPort, 10000, error) || session.processId() != 0) return 51;
     if (!session.start(store, 71, executable, mixedPort, apiPort, 10000, error) || !session.stop(error)) return 46;
+    // Pinned executable failure must be rejected before the old child is stopped.
+    if (!session.start(store, 71, executable, mixedPort, apiPort, 10000, error)) return 75;
+    const auto retainedPid = session.processId();
+    const auto retainedGeneration = ownership.generation(Ownership::Owner::Managed);
+    if (session.reconnect(store, 71, executable + ".missing", mixedPort, apiPort, 10000, error) ||
+        error.isEmpty() || session.processId() != retainedPid ||
+        ownership.generation(Ownership::Owner::Managed) != retainedGeneration ||
+        session.state() != NekoGui_sub::ManagedCoreProcess::State::Ready) return 76;
+    // Config validation does not bind the port. Occupy the replacement API
+    // endpoint to force a real post-Stop launch/readiness failure, no VPN traffic.
+    QTcpServer occupiedApi;
+    if (!occupiedApi.listen(QHostAddress::LocalHost, 0)) return 77;
+    if (session.reconnect(store, 71, executable, mixedPort, occupiedApi.serverPort(), 500, error) ||
+        error.isEmpty() || session.processId() != 0 || session.groupId() != -1 ||
+        session.state() != NekoGui_sub::ManagedCoreProcess::State::Failed ||
+        ownership.owner() != Ownership::Owner::None || !portsClosed()) return 78;
+    if (!occupiedApi.isListening() || !store.load(71, saved, error) || saved.source != source) return 79;
+    occupiedApi.close();
+    // Failure is terminal for reconnect; only an explicit new Start recovers.
+    if (!session.start(store, 71, executable, mixedPort, apiPort, 10000, error) || !session.stop(error)) return 80;
+    QTextStream(stdout) << "MANAGED_RECONNECT_EXECUTABLE_PREFLIGHT_AND_POST_STOP_FAILURE_PASS\n";
     QTextStream(stdout) << "MANAGED_SNAPSHOT_SESSION_READINESS_STOP_PASS\n";
     {
         NekoGui_sub::ManagedSessionController controller;

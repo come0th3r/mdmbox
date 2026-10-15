@@ -646,6 +646,26 @@ unconfirmed Stop injection, post-Stop replacement failure, concurrent snapshot
 mutation and expiry during preflight are NOT RUN. Last-working runtime rollback
 is not implemented; this does not complete the refresh/apply release gate.
 
+### Reconnect post-Stop failure boundary
+
+Reconnect rechecks captured metadata after pinned validation and before Stop,
+so a known expiry reached during validation is not intentionally applied.
+The real runtime fixture verifies a missing executable preserves the old
+PID/ownership generation/Ready. It then occupies a different replacement API
+port with a local QTcpServer: configuration preflight succeeds, the old child
+stops, and real replacement launch/readiness fails. Reconnect must return false
+with Failed/PID0/group-1, ownershipNone, old ports closed, the fixture listener
+still listening and snapshot bytes unchanged. Only an explicit Start recovers.
+
+Windows production/fixture builds PASS, full mihomo smoke PASS exit0/forced0:
+MANAGED_RECONNECT_EXECUTABLE_PREFLIGHT_AND_POST_STOP_FAILURE_PASS.
+Production bridge/hook/reload/crash E2E PASS, CTest6/6 PASS, parser39/39 and
+process fixtures PASS. No automatic rollback/retry is implemented: failure
+after Stop is terminal and is not successful apply. Last-working runtime
+rollback remains a release blocker requiring exact prior snapshot/metadata/
+launch-options retention and expiry policy. Forced/unconfirmed Stop injection
+and deterministic expiry-during-validator fixtures remain NOT RUN.
+
 ## Installation identity
 
 `InstallationIdentity::loadOrCreate` stores a UUID in a schema-1 envelope under
