@@ -9,8 +9,29 @@
 #include <QSslSocket>
 #include <QTimer>
 #include <QUuid>
+#ifdef MDMBOX_TEST_TLS_CA_INJECTION
+#include <QMutex>
+#include <QMutexLocker>
+#endif
 
 namespace NekoGui_sub {
+#ifdef MDMBOX_TEST_TLS_CA_INJECTION
+    namespace {
+        QMutex testCaMutex;
+        QList<QSslCertificate> testCaCertificates;
+    }
+
+    void SubscriptionDownloader::setTestCaCertificates(const QList<QSslCertificate> &certificates) {
+        QMutexLocker lock(&testCaMutex);
+        testCaCertificates = certificates;
+    }
+
+    void SubscriptionDownloader::clearTestCaCertificates() {
+        QMutexLocker lock(&testCaMutex);
+        testCaCertificates.clear();
+    }
+#endif
+
     bool SubscriptionDownloader::fetch(const ManagedSubscriptionRequest &request, const QString &installationId,
                                         SubscriptionDownload &result, QString &error,
                                         const std::atomic_bool *cancel, int timeoutMs) {
@@ -42,6 +63,12 @@ namespace NekoGui_sub {
         networkRequest.setRawHeader("Cache-Control", "no-cache");
         auto ssl = QSslConfiguration::defaultConfiguration();
         ssl.setPeerVerifyMode(QSslSocket::VerifyPeer);
+#ifdef MDMBOX_TEST_TLS_CA_INJECTION
+        if (url.host() == QStringLiteral("localhost") || url.host() == QStringLiteral("127.0.0.1")) {
+            QMutexLocker lock(&testCaMutex);
+            ssl.addCaCertificates(testCaCertificates);
+        }
+#endif
         networkRequest.setSslConfiguration(ssl);
         auto *reply = manager.get(networkRequest);
         reply->setReadBufferSize(64 * 1024);

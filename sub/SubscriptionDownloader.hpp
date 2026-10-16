@@ -2,6 +2,9 @@
 
 #include "SubscriptionContract.hpp"
 #include <atomic>
+#ifdef MDMBOX_TEST_TLS_CA_INJECTION
+#include <QSslCertificate>
+#endif
 
 namespace NekoGui_sub {
     struct SubscriptionDownload {
@@ -11,6 +14,11 @@ namespace NekoGui_sub {
 
     class SubscriptionDownloader {
     public:
+#ifdef MDMBOX_TEST_TLS_CA_INJECTION
+        // Isolated-fixture trust only. The implementation restricts this to loopback hosts.
+        static void setTestCaCertificates(const QList<QSslCertificate> &certificates);
+        static void clearTestCaCertificates();
+#endif
         // Synchronous worker-thread API. Failure leaves result untouched.
         static bool fetch(const ManagedSubscriptionRequest &request, const QString &installationId,
                           SubscriptionDownload &result, QString &error,

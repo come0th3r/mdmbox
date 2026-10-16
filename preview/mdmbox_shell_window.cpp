@@ -602,6 +602,9 @@ void MdmBoxShellWindow::hookPage() {
                   stop: function (requestId) {
                     window.mdmboxBridge.managedStop(String(requestId || ""));
                    },
+                   refreshSubscription: function (groupId, requestId) {
+                     window.mdmboxBridge.managedRefresh(groupId, String(requestId || ""));
+                   },
                    reconnect: function (groupId, requestId) {
                      window.mdmboxBridge.managedReconnect(groupId, String(requestId || ""));
                    },
@@ -1658,6 +1661,14 @@ QJsonObject MdmBoxShellWindow::managedLoopbackReconnectResult(int groupId, const
             {QStringLiteral("runtime"), QJsonObject{}}};
 }
 
+QJsonObject MdmBoxShellWindow::managedLoopbackRefreshResult(int groupId, const QString &requestId) {
+    if (auto *mw = GetMainWindow()) return mw->managedLoopbackRefreshResult(groupId, requestId);
+    return {{QStringLiteral("schemaVersion"), 1},
+            {QStringLiteral("command"), QStringLiteral("managedRefresh")},
+            {QStringLiteral("accepted"), false}, {QStringLiteral("queued"), false},
+            {QStringLiteral("error"), QStringLiteral("Main window is unavailable")},
+            {QStringLiteral("runtime"), QJsonObject{}}};
+}
 QJsonObject MdmBoxShellWindow::managedLoopbackStopResult(const QString &requestId) {
     if (auto *mw = GetMainWindow()) return mw->managedLoopbackStopResult(requestId);
     return {{QStringLiteral("schemaVersion"), 1},

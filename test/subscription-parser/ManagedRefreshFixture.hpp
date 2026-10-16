@@ -16,6 +16,7 @@ public:
     QByteArray body;
     QByteArray lastRequest;
     int requests = 0;
+    qint64 expiry = 0;
 
     void incomingConnection(qintptr descriptor) override {
         auto *socket = new QSslSocket(this);
@@ -32,7 +33,8 @@ public:
             lastRequest = input;
             ++requests;
             socket->write("HTTP/1.1 200 OK\r\nProfile-Update-Interval: 1\r\n"
-                          "Subscription-Userinfo: upload=4294967296; download=1; total=0; expire=0\r\n"
+                          "Subscription-Userinfo: upload=4294967296; download=1; total=0; expire=" +
+                          QByteArray::number(expiry) + "\r\n"
                           "Profile-Title: base64:U3ludGhldGlj\r\nContent-Length: " +
                           QByteArray::number(body.size()) + "\r\n\r\n" + body);
             socket->disconnectFromHost();

@@ -19,6 +19,7 @@ public slots:
     void managedStart(const QJsonValue &groupId, const QString &requestId);
     void managedStop(const QString &requestId);
     void managedReconnect(const QJsonValue &groupId, const QString &requestId);
+    void managedRefresh(const QJsonValue &groupId, const QString &requestId);
     QJsonObject managedSnapshot();
     void toggleTun();
     void toggleSystemProxy();

@@ -26,6 +26,7 @@ public:
     QJsonObject managedLoopbackStartResult(int groupId, const QString &requestId);
     QJsonObject managedLoopbackStopResult(const QString &requestId);
     QJsonObject managedLoopbackReconnectResult(int groupId, const QString &requestId);
+    QJsonObject managedLoopbackRefreshResult(int groupId, const QString &requestId);
     QJsonObject managedRuntimeSnapshot() const;
     void triggerTunToggle();
     void triggerSystemProxyToggle();

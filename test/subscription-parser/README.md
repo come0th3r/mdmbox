@@ -56,3 +56,26 @@ This proves the production backend path in an isolated entry point, not the
 actual application window, private/live panel, provider cache, VPN connection
 or runtime apply/reconnect. Regenerate expired certificates; no system trust
 or proxy/TUN changes are made.
+
+## Managed refresh through the production bridge
+
+On the isolated production-graph parser build, place the checksum-pinned
+`mihomo.exe` beside the runner and generate a short-lived synthetic certificate
+outside the repository using `test/subscription-download/tls-test.cnf`. Invoke:
+
+```powershell
+$env:QT_QPA_PLATFORM = 'offscreen'
+<build-dir>/mdmbox_subscription_parser_test.exe --managed-bridge-e2e <cert.pem> <key.pem>
+```
+
+The fixture trusts that certificate only in-process and serves a synthetic
+profile over localhost HTTPS. It exercises actual shell hook/QWebChannel,
+MainWindow guards, controller, downloader, pinned mihomo validation, atomic
+store and apply path. A subsequent HTTP 200 response with expired metadata must
+be rejected after fetch without validation/commit, leaving the current ready
+process and stored source unchanged. The test-only CA override is restricted to
+loopback URLs, synchronized across the controller worker, and compiled only in
+the isolated parser target; production retains normal peer verification. No real
+panel, profile, system certificate store, proxy, TUN or routes are used. There
+is no automatic scheduler, and this does not imply a successful external VPN
+connection.

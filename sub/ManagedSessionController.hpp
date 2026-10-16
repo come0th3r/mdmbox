@@ -19,6 +19,9 @@ namespace NekoGui_sub {
         bool stop();
         bool reconnect(const QString &directory, int groupId, const QString &executable,
                        int mixedPort, int apiPort, int timeoutMs, const QString &requestId = {});
+        bool refreshAndReconnect(const QString &directory, int groupId, const QUrl &url,
+                                 const QString &appVersion, const QString &executable,
+                                 int mixedPort, int apiPort, int timeoutMs, const QString &requestId);
         bool busy() const { return pending || deliveringCompletion; }
         int state() const { return lastState; }
         int groupId() const { return lastGroup; }
@@ -34,6 +37,8 @@ namespace NekoGui_sub {
         // One immutable completion per accepted reconnect; busy refusals emit none.
         void reconnectCompleted(const QString &requestId, bool success, int outcome,
                                 const QString &error, const QJsonObject &snapshot);
+        void refreshCompleted(const QString &requestId, bool success, int outcome,
+                              const QString &error, const QJsonObject &snapshot);
     private:
         QThread workerThread;
         QObject *worker;
@@ -46,8 +51,8 @@ namespace NekoGui_sub {
         int lastGroup = -1;
         qint64 lastPid = 0;
         void publish(bool success, const QString &error,
-                     ManagedSession::ReconnectOutcome outcome = ManagedSession::ReconnectOutcome::None,
-                     const QString &requestId = {});
+                      ManagedSession::ReconnectOutcome outcome = ManagedSession::ReconnectOutcome::None,
+                      const QString &requestId = {}, bool refresh = false);
         void ensureSession();
     };
 }

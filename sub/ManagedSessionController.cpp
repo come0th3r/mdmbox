@@ -1,4 +1,5 @@
 #include "ManagedSessionController.hpp"
+#include "SubscriptionDownloader.hpp"
 
 namespace NekoGui_sub {
     QJsonObject ManagedSessionController::snapshot() const {
@@ -44,11 +45,12 @@ namespace NekoGui_sub {
     }
 
     void ManagedSessionController::publish(bool success, const QString &error,
-                                          ManagedSession::ReconnectOutcome outcome, const QString &requestId) {
+                                          ManagedSession::ReconnectOutcome outcome, const QString &requestId,
+                                          bool refresh) {
         const auto state = session->state();
         const auto group = session->groupId();
         const auto pid = session->processId();
-        QMetaObject::invokeMethod(this, [this, state, group, pid, success, error, outcome, requestId] {
+        QMetaObject::invokeMethod(this, [this, state, group, pid, success, error, outcome, requestId, refresh] {
             deliveringCompletion = true;
             pending = false;
             lastState = static_cast<int>(state);
@@ -58,7 +60,10 @@ namespace NekoGui_sub {
             const auto completedSnapshot = snapshot();
             emit statusChanged(lastState, group, pid);
             if (outcome != ManagedSession::ReconnectOutcome::None) {
-                emit reconnectCompleted(requestId, success, static_cast<int>(outcome), error, completedSnapshot);
+                if (refresh)
+                    emit refreshCompleted(requestId, success, static_cast<int>(outcome), error, completedSnapshot);
+                else
+                    emit reconnectCompleted(requestId, success, static_cast<int>(outcome), error, completedSnapshot);
                 emit reconnectFinished(static_cast<int>(outcome));
             }
             emit operationFinished(success, error);
@@ -124,6 +129,33 @@ namespace NekoGui_sub {
             // A preflight refusal may leave the old Ready session active.
             if (session->groupId() >= 0) monitor->start();
             publish(success, error, outcome, requestId);
+        }, Qt::QueuedConnection);
+        return true;
+    }
+
+    bool ManagedSessionController::refreshAndReconnect(const QString &directory, int groupId, const QUrl &url,
+                                                       const QString &appVersion, const QString &executable,
+                                                       int mixedPort, int apiPort, int timeoutMs,
+                                                       const QString &requestId) {
+        if (busy() || requestId.isEmpty() || requestId.size() > 128) return false;
+        pending = true;
+        QMetaObject::invokeMethod(worker, [=] {
+            ensureSession();
+            executing = true;
+            QString error;
+            const SubscriptionService::Fetcher fetch = [](const ManagedSubscriptionRequest &request,
+                                                          const QString &identity, SubscriptionDownload &download,
+                                                          QString &reason, const std::atomic_bool *cancel) {
+                return SubscriptionDownloader::fetch(request, identity, download, reason, cancel);
+            };
+            ManagedProfileStore store(directory);
+            const bool success = session->refreshAndReconnect(store, groupId, url,
+                appVersion, directory, fetch, executable, mixedPort, apiPort, timeoutMs, error);
+            const auto outcome = session->reconnectOutcome();
+            executing = false;
+            if (session->groupId() >= 0) monitor->start();
+            publish(success, success ? QString() : QStringLiteral("Managed refresh/apply failed"),
+                    outcome, requestId, true);
         }, Qt::QueuedConnection);
         return true;
     }

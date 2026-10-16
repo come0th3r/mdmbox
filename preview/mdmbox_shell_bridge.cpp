@@ -48,6 +48,17 @@ void MdmBoxShellBridge::managedReconnect(const QJsonValue &groupId, const QStrin
             QStringLiteral("Shell is unavailable"), {}));
 }
 
+void MdmBoxShellBridge::managedRefresh(const QJsonValue &groupId, const QString &requestId) {
+    int id = -1;
+    if (!NekoGui_sub::ManagedCommandContract::groupId(groupId, id)) {
+        emit managedCommandResult(requestId, NekoGui_sub::ManagedCommandContract::result(
+            QStringLiteral("managedRefresh"), false, QStringLiteral("Invalid group ID"), {}));
+        return;
+    }
+    emit managedCommandResult(requestId, window ? window->managedLoopbackRefreshResult(id, requestId) :
+        NekoGui_sub::ManagedCommandContract::result(QStringLiteral("managedRefresh"), false,
+            QStringLiteral("Shell is unavailable"), {}));
+}
 void MdmBoxShellBridge::toggleTun() {
     if (window) window->triggerTunToggle();
 }

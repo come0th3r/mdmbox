@@ -2,6 +2,7 @@
 #include <windows.h> // Before project enum names and Qt's interface macro.
 #endif
 #include <QApplication>
+#include <QDir>
 #include <QTemporaryDir>
 #include <QTextStream>
 #include <QTimer>
@@ -13,12 +14,15 @@
 #include "sub/MihomoValidator.hpp"
 #include "sub/ManagedProfileStore.hpp"
 #include "sub/ManagedSessionController.hpp"
+#include "sub/SubscriptionDownloader.hpp"
+#include "ManagedRefreshFixture.hpp"
 #include <QWebEngineView>
 #include <QWebEnginePage>
 #include <QWebEngineProfile>
 #include <QElapsedTimer>
 #include <QTcpSocket>
 #include <QEventLoop>
+#include <QFile>
 
 // Production MainWindow/controller + actual shell bridge, isolated cwd and HTML.
 // The test build excludes ONLY automatic legacy core/remembered OS mode startup.
@@ -44,21 +48,42 @@ int runManagedBridgeFixture(QApplication &app) {
     const QString executable = QCoreApplication::applicationDirPath() + "/mihomo.exe";
     QString error;
     NekoGui_sub::ManagedProfileStore store("managed-subscriptions");
+    NekoGui_sub::ManagedProfile saved;
     if (!store.commit(group->id, source, [&](const NekoGui_sub::ManagedProfile &profile, QString &e) {
         return NekoGui_sub::MihomoValidator::validate(executable, profile, e);
     }, error)) { QTextStream(stderr) << "BRIDGE_SNAPSHOT_FAILED " << error << "\n"; return 91; }
 
-    MdmBoxShellWindow shell(nullptr, false); // Do not load design HTML/remote assets.
+    const auto arguments = app.arguments();
+    const auto fixtureIndex = arguments.indexOf(QStringLiteral("--managed-bridge-e2e"));
+    if (fixtureIndex < 0 || fixtureIndex + 2 >= arguments.size()) return 114;
+    QFile certFile(arguments.at(fixtureIndex + 1)), keyFile(arguments.at(fixtureIndex + 2));
+    if (!QSslSocket::supportsSsl() || !certFile.open(QIODevice::ReadOnly) || !keyFile.open(QIODevice::ReadOnly)) return 115;
+    ManagedRefreshFixture httpsServer;
+    httpsServer.certificate = QSslCertificate(certFile.readAll());
+    httpsServer.key = QSslKey(keyFile.readAll(), QSsl::Rsa);
+    if (httpsServer.certificate.isNull() || httpsServer.key.isNull() ||
+        !httpsServer.listen(QHostAddress::LocalHost, 0)) return 116;
+    NekoGui_sub::SubscriptionDownloader::setTestCaCertificates({httpsServer.certificate});
+    struct RestoreFixtureTrust {
+        ~RestoreFixtureTrust() { NekoGui_sub::SubscriptionDownloader::clearTestCaCertificates(); }
+    } restoreTrust;
+
+    MdmBoxShellWindow shell(nullptr, false); // Core E2E uses a controlled synthetic WebEngine page.
     auto *bridge = shell.findChild<MdmBoxShellBridge *>();
     if (!bridge) return 92;
     auto *view = shell.findChild<QWebEngineView *>();
     if (!view || !view->page()->profile()->isOffTheRecord()) return 98;
-    auto &page = *view->page(); // Actual production hookPage/channel, local HTML only.
+    auto &page = *view->page(); // Actual production hookPage/channel, synthetic local HTML only.
     int phase = 0;
     int startReplies = 0, busyReplies = 0, stopReplies = 0;
     int readyEvents = 0, stoppedEvents = 0, crashEvents = 0, loadedPages = 0;
     int restoredReady = 0;
     int reconnectReplies = 0, reconnectEvents = 0, refusedReconnectReplies = 0;
+    int refreshReplies = 0, refreshEvents = 0, refreshFailureEvents = 0, duplicateRefreshCompletions = 0;
+    int refreshOperationCompletions = 0;
+    int refreshControllerCompletions = 0;
+    bool lastRefreshSuccess = false;
+    int lastRefreshOutcome = -1;
     int rejectedReplies = 0, rejectedEvents = 0;
     bool failed = false;
     auto await = [&](const std::function<bool()> &condition) {
@@ -87,7 +112,16 @@ int runManagedBridgeFixture(QApplication &app) {
         }
         else if (id == "js-reconnected") ++reconnectEvents;
         else if (id == "reconnect-rejected") { ++rejectedReplies; if (!r.value("accepted").toBool()) failed = true; }
+        else if (id == "refresh") { ++refreshReplies; if (!r.value("accepted").toBool()) failed = true; }
+        else if (id == "refresh-failed") {
+            ++refreshReplies;
+            if (!r.value("accepted").toBool() || !r.value("queued").toBool() ||
+                !r.value("runtime").toObject().value("busy").toBool()) failed = true;
+        }
+        else if (id == "js-refresh-failed") ++refreshFailureEvents;
+        else if (id == "js-refresh-duplicate") ++duplicateRefreshCompletions;
         else if (id == "js-reconnect-rejected") ++rejectedEvents;
+        else if (id == "js-refreshed") ++refreshEvents;
         else if (id == "js-failed") failed = true;
     });
     QObject::connect(&page, &QWebEnginePage::renderProcessTerminated, &app,
@@ -105,10 +139,29 @@ int runManagedBridgeFixture(QApplication &app) {
             const id=event.detail.requestId,r=event.detail.result;
             if(id==='start' && (!r.accepted || !r.queued || !r.runtime.busy || r.runtime.vpnConnected))
                window.mdmboxManaged.start(null,'js-failed');
+            if(((id==='refresh'||id==='refresh-failed') &&
+                (!r.accepted || !r.queued || !r.runtime.busy || r.runtime.vpnConnected)))
+               window.mdmboxManaged.start(null,'js-failed');
         });
         window.addEventListener('mdmbox-managed-runtime',function(event){
             const e=event.detail,m=window.mdmboxManaged;
             if(e.schemaVersion!==1||e.runtime.vpnConnected){m.start(null,'js-failed');return;}
+            if(e.type==='refreshCompleted'){
+              if(e.command!=='managedRefresh'||!e.runtime.controllerReady||e.runtime.state!=='ready'){
+                m.start(null,'js-failed');return;
+              }
+              if(e.requestId==='refresh-failed'){
+                if(e.success||e.outcome!=='rejected'||!e.error){m.start(null,'js-failed');return;}
+                m.start(null,'js-refresh-failed');return;
+              }
+              if(e.requestId!=='refresh'||!e.success||e.outcome!=='applied'||e.error!==''){
+                m.start(null,'js-failed');return;
+              }
+              m.start(null,'js-refreshed');return;
+            }
+            if(e.type==='operationFinished'&&e.command==='managedRefresh'){
+              m.start(null,'js-refresh-duplicate');return;
+            }
             if(e.type==='reconnectCompleted'){
               if(e.requestId==='reconnect-rejected'){
                 if(e.command!=='managedReconnect'||e.success||e.outcome!=='rejected'||!e.error||
@@ -159,6 +212,14 @@ int runManagedBridgeFixture(QApplication &app) {
         !window.shellManagedRuntimeState().value("controllerReady").toBool()) return 100;
     auto *reconnectController = window.findChild<NekoGui_sub::ManagedSessionController *>();
     if (!reconnectController) return 107;
+    QObject::connect(reconnectController, &NekoGui_sub::ManagedSessionController::operationFinished,
+                     &app, [&](bool, const QString &) { ++refreshOperationCompletions; });
+    QObject::connect(reconnectController, &NekoGui_sub::ManagedSessionController::refreshCompleted,
+                     &app, [&](const QString &, bool success, int outcome, const QString &, const QJsonObject &) {
+        ++refreshControllerCompletions;
+        lastRefreshSuccess = success;
+        lastRefreshOutcome = outcome;
+    });
     const auto oldGeneration = NekoGui_sub::CoreOwnership::shared().generation(NekoGui_sub::CoreOwnership::Owner::Managed);
     page.runJavaScript(QString("window.mdmboxManaged.reconnect(%1,'reconnect');window.mdmboxManaged.reconnect(%1,'reconnect-busy')").arg(group->id));
     if (!await([&] { return reconnectEvents == 1; }) || reconnectReplies != 1 || refusedReconnectReplies != 3 ||
@@ -176,6 +237,47 @@ int runManagedBridgeFixture(QApplication &app) {
     if (!store.commit(group->id, source, [&](const NekoGui_sub::ManagedProfile &profile, QString &e) {
         return NekoGui_sub::MihomoValidator::validate(executable, profile, e);
     }, error)) return 112;
+    const int operationCompletionsBeforeRefresh = refreshOperationCompletions;
+    const int controllerCompletionsBeforeRefresh = refreshControllerCompletions;
+    const auto refreshedSource = source + "# synthetic HTTPS refresh\n";
+    httpsServer.body = refreshedSource;
+    group->url = QString("https://localhost:%1/synthetic?keep=bridge&format=uri")
+        .arg(httpsServer.serverPort());
+    group->Save();
+    page.runJavaScript(QString("window.mdmboxManaged.refreshSubscription(%1,'refresh')").arg(group->id));
+    if (!await([&] { return refreshEvents == 1 && !reconnectController->busy(); }) ||
+        refreshReplies != 1 || httpsServer.requests != 1 ||
+        reconnectController->processId() <= 0 ||
+        NekoGui_sub::CoreOwnership::shared().generation(NekoGui_sub::CoreOwnership::Owner::Managed) <= preservedGeneration) return 117;
+    const auto refreshHeaders = httpsServer.lastRequest.toLower();
+    if (!refreshHeaders.contains("user-agent: mdmbox/") || !refreshHeaders.contains("x-hwid:") ||
+        !httpsServer.lastRequest.contains("format=clash") || !store.load(group->id, saved, error) ||
+        saved.source != refreshedSource) return 118;
+    const auto readyPid = reconnectController->processId();
+    const auto readyGeneration = NekoGui_sub::CoreOwnership::shared().generation(NekoGui_sub::CoreOwnership::Owner::Managed);
+    httpsServer.expiry = 1; // Real HTTP 200, rejected after fetch before validation or commit.
+    page.runJavaScript(QString("window.mdmboxManaged.refreshSubscription(%1,'refresh-failed')").arg(group->id));
+    const bool failureEvent = await([&] { return refreshFailureEvents == 1 && !reconnectController->busy(); });
+    const bool preservedSnapshot = store.load(group->id, saved, error) && saved.source == refreshedSource;
+    if (!failureEvent || refreshReplies != 2 || httpsServer.requests != 2 ||
+        refreshOperationCompletions - operationCompletionsBeforeRefresh != 2 ||
+        refreshControllerCompletions - controllerCompletionsBeforeRefresh != 2 ||
+        reconnectController->processId() != readyPid ||
+        NekoGui_sub::CoreOwnership::shared().generation(NekoGui_sub::CoreOwnership::Owner::Managed) != readyGeneration ||
+        !preservedSnapshot) {
+        QTextStream(stderr) << "REFRESH_REJECTION_DIAGNOSTIC event=" << refreshFailureEvents
+            << " replies=" << refreshReplies << " requests=" << httpsServer.requests
+            << " opCompletions=" << refreshOperationCompletions
+            << " refreshCompletions=" << refreshControllerCompletions
+            << " lastSuccess=" << lastRefreshSuccess << " lastOutcome=" << lastRefreshOutcome
+            << " busy=" << reconnectController->busy()
+            << " stateReady=" << (reconnectController->state() == static_cast<int>(NekoGui_sub::ManagedCoreProcess::State::Ready))
+            << " controllerGroup=" << reconnectController->groupId() << " requestedGroup=" << group->id
+            << " samePid=" << (reconnectController->processId() == readyPid)
+            << " sameGeneration=" << (NekoGui_sub::CoreOwnership::shared().generation(NekoGui_sub::CoreOwnership::Owner::Managed) == readyGeneration)
+            << " sameSnapshot=" << preservedSnapshot << "\n";
+        return 120;
+    }
 #ifdef Q_OS_WIN
     auto *controller = window.findChild<NekoGui_sub::ManagedSessionController *>();
     if (!controller || controller->processId() <= 0) return 101;
@@ -197,8 +299,7 @@ int runManagedBridgeFixture(QApplication &app) {
         socket.connectToHost(QHostAddress::LocalHost, port);
         if (socket.waitForConnected(250)) return 96;
     }
-    NekoGui_sub::ManagedProfile saved;
-    if (!store.load(group->id, saved, error) || saved.source != source || window.managedBlocksLegacy() ||
+    if (!store.load(group->id, saved, error) || saved.source != refreshedSource || window.managedBlocksLegacy() ||
         NekoGui_sub::CoreOwnership::shared().owner() != NekoGui_sub::CoreOwnership::Owner::None) return 97;
     QTextStream(stdout) << "MANAGED_PRODUCTION_BRIDGE_JS_START_BUSY_READY_STOP_PASS\n";
     if (stoppedEvents != 1) return 105;
@@ -208,6 +309,9 @@ int runManagedBridgeFixture(QApplication &app) {
     QTextStream(stdout) << "MANAGED_PRODUCTION_BRIDGE_RECONNECT_CORRELATED_APPLIED_PASS\n";
     if (rejectedEvents != 1) return 113;
     QTextStream(stdout) << "MANAGED_PRODUCTION_BRIDGE_RECONNECT_REJECTED_RETAINS_READY_PASS\n";
+    if (refreshEvents != 1 || refreshFailureEvents != 1 || duplicateRefreshCompletions != 0 ||
+        refreshReplies != 2 || httpsServer.requests != 2) return 119;
+    QTextStream(stdout) << "MANAGED_PRODUCTION_BRIDGE_HTTPS_REFRESH_VALIDATE_COMMIT_APPLY_AND_REJECT_PRESERVATION_PASS\n";
 #ifdef Q_OS_WIN
     QTextStream(stdout) << "MANAGED_PRODUCTION_CRASH_JS_FAILED_RESTART_PASS\n";
 #endif
