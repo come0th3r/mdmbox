@@ -137,6 +137,18 @@ automatic localhost proxy bypass. Two Windows runs PASS. This is mixed HTTP →
 DIRECT → local origin, not SOCKS5 outbound/VPN protocol E2E. Graceful shutdown
 still needs forced fallback; no improvement to that gate is claimed.
 
+An isolated Windows protocol experiment additionally exercised VLESS REALITY
+Vision between the pinned mihomo v1.19.32 client and a synthetic local sing-box
+server built from the repository-pinned sing-box source revision with the
+`with_reality_server` and `with_utls` build tags. Both configs passed their
+respective config checks; one HTTP request traversed a completed REALITY/Vision
+TCP session to a loopback origin (`VLESS_REALITY_VISION_LOOPBACK_TCP_DATA_PATH_PASS
+requests=1`). The server used a separate TLS 1.3 camouflage endpoint on loopback.
+This was an ad hoc test-host experiment, not a checked-in/reproducible CTest
+fixture or the production core build. It establishes TCP only: REALITY UDP,
+mikan export/refresh mapping, other REALITY transports, and public endpoints
+remain untested. The ordinary mihomo build remains pinned to its original hash;
+the tagged sing-box binary was temporary test infrastructure only.
 ### Windows console shutdown update
 
 The current smoke creates a separate hidden console for its core and invokes

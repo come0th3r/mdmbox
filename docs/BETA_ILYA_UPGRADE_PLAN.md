@@ -146,7 +146,7 @@ C++17 / Qt 6 — сервисы приложения и модели Nekobox
 
 | Пресет/протокол mikan | Плановый путь полного покрытия | Обязательная проверка |
 | --- | --- | --- |
-| VLESS REALITY Vision | mihomo | UUID, SNI, public key, short ID, flow, TCP/UDP |
+| VLESS REALITY Vision | mihomo | UUID, SNI, public key, short ID, flow, TCP/UDP. **Частично:** synthetic loopback TCP полный REALITY handshake + Vision и HTTP data path PASS на pinned mihomo v1.19.32; UDP не проверен. Это отдельный ad hoc fixture, не production build и не вся mikan matrix. |
 | VLESS REALITY XHTTP | mihomo; сохранить существующий Xray-путь | XHTTP options, mode, host/path, REALITY |
 | VLESS REALITY gRPC | mihomo | service name, TLS/REALITY параметры |
 | VLESS PQ / Encryption | mihomo | сохранение encryption без упрощения до `none` |
