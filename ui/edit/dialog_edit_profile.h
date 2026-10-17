@@ -45,6 +45,8 @@ private:
     int groupId;
     bool newEnt = false;
     std::shared_ptr<NekoGui::ProxyEntity> ent;
+    std::shared_ptr<NekoGui::ProxyEntity> originalEnt;
+    QJsonObject originalBean;
 
     QString network_title_base;
 
@@ -57,6 +59,8 @@ private:
     void typeSelected(const QString &newType);
 
     bool onEnd();
+
+    bool saveExistingProfile(bool &changed);
 
     void editor_cache_updated_impl();
 

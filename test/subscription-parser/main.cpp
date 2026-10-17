@@ -10,6 +10,7 @@
 #include "LegacyMigrationAdversarial.hpp"
 #include "LegacyBackupFixture.hpp"
 #include "LegacyRestoreFixture.hpp"
+#include "LegacySaveCallerFixture.hpp"
 #include <QTimer>
 #include <QApplication>
 #include <QDir>
@@ -33,7 +34,12 @@ int main(int argc, char **argv) {
     // Keep the offline migration branch before QApplication and every other
     // fixture. Malformed migration arguments fail closed, never fall through.
     if (argc > 1 && QString::fromLocal8Bit(argv[1]).startsWith(QStringLiteral("--legacy-migration"))) {
+        if (QString::fromLocal8Bit(argv[1]) == "--legacy-migration-callers-child") {
+            QApplication app(argc, argv);
+            return LegacySaveCallerFixture::child(app);
+        }
         QCoreApplication app(argc, argv);
+        if (app.arguments().value(1) == "--legacy-migration-callers") return LegacySaveCallerFixture::run(app);
         if (app.arguments().value(1) == "--legacy-migration-restore" ||
             app.arguments().value(1) == "--legacy-migration-restore-child" ||
             app.arguments().value(1) == "--legacy-migration-restore-interrupt-child") return LegacyRestoreFixture::run(app);

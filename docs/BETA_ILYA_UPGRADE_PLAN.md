@@ -130,6 +130,8 @@ C++17 / Qt 6 — сервисы приложения и модели Nekobox
 
 ## 4. Этап 1 — подписки, протоколы и автоправила
 
+**MIG-10/R3, 2026-10-17:** UpdateDataStore использует checked status перед автоматическим restart; редактор существующего профиля держит detached edits и не закрывается/не отправляет restart при отказе сохранения. Windows Release build и два caller-прогона PASS с реальным sharing denial/Disabled, retry/nochange/stale guards. Evidence: `test/subscription-parser/LEGACY_SAVE_CALLERS.md`. Independent production review BLOCKED UI-read permissions; settings rollback, все start/apply paths, new-profile/group-target writes и multi-store gates остаются открыты. Флажки не закрыты.
+
 ### 4.1. Подписки и хранение
 
 - [ ] Выделить сервис подписок из `GroupUpdater`; оставить совместимость с импортом старых ссылок, групп и профилей.

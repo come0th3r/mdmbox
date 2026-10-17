@@ -143,6 +143,14 @@ startup gating, appdata switching, rollback or full migration acceptance.
 
 ## 2.3 Required legacy-data invariants for acceptance fixtures
 
+MIG-10/R3 adds bounded checked-save caller handling: UpdateDataStore failure
+returns before automatic restart, existing-profile editor detaches edits and
+requires checked persistence before accept/restart notification. Windows Release
+fixture twice PASS (actual sharing denial/Disabled, retry, nochange, stale identity).
+`test/subscription-parser/LEGACY_SAVE_CALLERS.md` records evidence and limits.
+Independent production review BLOCKED UI read permissions. Settings remain in
+memory on failure; this is not universal apply gating or multi-store rollback.
+
 Fixtures should cover both data preservation and the existing loader's repair
 behavior, while distinguishing observed behavior from an approved policy:
 

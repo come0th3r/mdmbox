@@ -4,7 +4,7 @@ import { linkSync, mkdtempSync, readFileSync, unlinkSync, rmdirSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
-import { acceptedResult, adversarialCases, backupMarker, restoreMarker, checkedExecutable, inspectFixture, observationMarker, parseArguments, passMarker } from '../tools/test-legacy-migration.mjs';
+import { acceptedResult, adversarialCases, backupMarker, restoreMarker, callersMarker, checkedExecutable, inspectFixture, observationMarker, parseArguments, passMarker } from '../tools/test-legacy-migration.mjs';
 
 const { files, source, entrypoint } = inspectFixture();
 const groups = Object.entries(files).filter(([path]) => /^groups[/][0-9]+[.]json$/.test(path));
@@ -74,7 +74,8 @@ test('routing uses production root and preserves exact rule order/DNS strings', 
 
 test('migration dispatch precedes QApplication and uses the global loader', () => {
   const body = entrypoint.slice(entrypoint.indexOf('int main('));
-  assert.ok(body.indexOf('LegacyMigrationFixture::run(app)') < body.indexOf('QApplication app('));
+  assert.ok(body.indexOf('LegacyMigrationFixture::run(app)') < body.lastIndexOf('QApplication app('));
+  assert.match(body, /== "--legacy-migration-callers-child"\) \{\s*QApplication app\(argc, argv\);\s*return LegacySaveCallerFixture::child\(app\);/);
   assert.match(source, /dataStore->flag_reorder = false;/);
   assert.match(source, /profileManager->LoadManager\(\);/);
   assert.doesNotMatch(source, /flag_reorder = true|removeRecursively\(|QDir::setCurrent\(/);
@@ -168,7 +169,7 @@ test('adversarial fixture remains owned, offline and explicitly characterizes di
   assert.doesNotMatch(edge, /removeRecursively\(|QDir::setCurrent\(/);
   assert.match(source, /role != "candidate" \|\| absent != QSet<QString>\{"profiles\/205.json"\}/);
   const main = entrypoint.slice(entrypoint.indexOf('int main('));
-  assert.ok(main.indexOf('LegacyMigrationAdversarial::run(app)') < main.indexOf('QApplication app('));
+  assert.ok(main.indexOf('LegacyMigrationAdversarial::run(app)') < main.lastIndexOf('QApplication app('));
 });
 
 test('checked save uses atomic commit without destructive fallback or premature cache update', () => {
@@ -261,5 +262,37 @@ test('restore validates copied bytes before publishing readiness and exercises o
   for (const code of ['restore-roundtrip', 'restore-corrupt-refusal', 'restore-partial-conflict',
     'restore-interrupt-preservation', 'restore-digest-refusal', 'restore-retry']) assert.ok(fixture.includes(code));
   assert.match(fixture, /interrupted\.kill\(\)/);
+  assert.doesNotMatch(fixture, /removeRecursively/);
+});
+
+test('caller launcher separates bounded dispatch tests from migration acceptance', () => {
+  const executable = resolve('synthetic-runner.exe'), sha256 = 'a'.repeat(64);
+  assert.deepEqual(parseArguments(['--runner', executable, '--sha256', sha256, '--callers']), { executable, sha256, callers: true });
+  assert.throws(() => parseArguments(['--runner', executable, '--sha256', sha256, '--callers', '--restore']));
+  const good = { status: 0, signal: null, stdout: callersMarker + '\n', stderr: '' };
+  assert.equal(acceptedResult(good, false, false, false, true), true);
+  assert.equal(acceptedResult(good), false);
+  for (const flags of [[true, false, false, true], [false, true, false, true], [false, false, true, true]]) {
+    assert.equal(acceptedResult(good, ...flags), false);
+  }
+  for (const change of [{ stdout: passMarker }, { stdout: restoreMarker }, { status: 1 },
+    { stdout: callersMarker + '\n' + callersMarker }, { stderr: 'LEGACY_MIGRATION_FAIL' }]) {
+    assert.equal(acceptedResult({ ...good, ...change }, false, false, false, true), false);
+  }
+});
+
+test('caller source guards fail before restart or editor accept notification', () => {
+  const window = readFileSync(new URL('../ui/mainwindow.cpp', import.meta.url), 'utf8');
+  const branch = window.slice(window.indexOf('if (info.contains("UpdateDataStore"))'), window.indexOf('if (info == "RestartProgram")'));
+  assert.match(branch, /SaveChecked\(\)/);
+  assert.match(branch, /if \(!saved.ok\(\)\) \{[\s\S]*?return;/);
+  assert.ok(branch.indexOf('return;') < branch.indexOf('neko_start('));
+  const editor = readFileSync(new URL('../ui/edit/dialog_edit_profile.cpp', import.meta.url), 'utf8');
+  assert.match(editor, /ent->FromJson\(originalEnt->ToJson\(\)\)/);
+  assert.match(editor, /originalEnt->bean->FromJson\(originalBean\)/);
+  assert.match(editor, /if \(!saveExistingProfile\(changed\)\) return;/);
+  const fixture = readFileSync(new URL('./subscription-parser/LegacySaveCallerFixture.hpp', import.meta.url), 'utf8');
+  for (const code of ['caller-settings-open', 'caller-settings-disabled', 'caller-settings-retry', 'caller-settings-unchanged',
+    'caller-editor-write-failure', 'caller-editor-disabled', 'caller-editor-retry', 'caller-editor-stale']) assert.ok(fixture.includes(code));
   assert.doesNotMatch(fixture, /removeRecursively/);
 });

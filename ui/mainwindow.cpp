@@ -946,7 +946,12 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
         refresh_status();
     }
     if (info.contains("UpdateDataStore")) {
-        auto suggestRestartProxy = NekoGui::dataStore->Save();
+        const auto saved = NekoGui::dataStore->SaveChecked();
+        if (!saved.ok()) {
+            MessageBoxWarning(tr("Save failed"), tr("Could not save settings. Automatic restart was cancelled. Unsaved settings remain in memory; retry saving before starting the proxy."));
+            return; // No apply, proxy restart or program-restart prompt on failure.
+        }
+        auto suggestRestartProxy = saved.changed;
         if (info.contains("RouteChanged")) {
             suggestRestartProxy = true;
         }

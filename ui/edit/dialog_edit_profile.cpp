@@ -128,8 +128,14 @@ DialogEditProfile::DialogEditProfile(const QString &_type, int profileOrGroupId,
 
         ui->apply_to_group->hide();
     } else {
-        this->ent = NekoGui::profileManager->GetProfile(profileOrGroupId);
-        if (this->ent == nullptr) return;
+        originalEnt = NekoGui::profileManager->GetProfile(profileOrGroupId);
+        if (originalEnt == nullptr) return;
+        // Editors mutate their entity in onEnd(). Keep those changes detached
+        // until persistence succeeds; cancel/failure must not alter a live bean.
+        originalBean = originalEnt->bean->ToJson();
+        ent = NekoGui::ProfileManager::NewProxyEntity(originalEnt->type);
+        ent->FromJson(originalEnt->ToJson());
+        ent->fn = originalEnt->fn;
         this->type = ent->type;
         ui->type->setVisible(false);
         ui->type_l->setVisible(false);
@@ -367,6 +373,28 @@ bool DialogEditProfile::onEnd() {
     return true;
 }
 
+bool DialogEditProfile::saveExistingProfile(bool &changed) {
+    changed = false;
+    if (!originalEnt || NekoGui::profileManager->GetProfile(ent->id) != originalEnt ||
+        originalEnt->id != ent->id || originalEnt->gid != ent->gid ||
+        originalEnt->type != ent->type || originalEnt->fn != ent->fn ||
+        originalEnt->bean->ToJson() != originalBean) {
+        MessageBoxWarning(tr("Save failed"), tr("The profile changed while editing. Reopen the editor and try again."));
+        return false;
+    }
+    // Preserve current traffic/latency rather than saving the stale editor copy.
+    originalEnt->bean->FromJson(ent->bean->ToJson());
+    const auto saved = originalEnt->SaveChecked();
+    if (!saved.ok()) {
+        originalEnt->bean->FromJson(originalBean);
+        MessageBoxWarning(tr("Save failed"), tr("Could not save the profile. Changes were not applied. Please retry."));
+        return false;
+    }
+    originalBean = originalEnt->bean->ToJson();
+    changed = saved.changed;
+    return true;
+}
+
 void DialogEditProfile::accept() {
     // save to ent
     if (!onEnd()) {
@@ -382,7 +410,8 @@ void DialogEditProfile::accept() {
             MessageBoxWarning("???", "id exists");
         }
     } else {
-        auto changed = ent->Save();
+        bool changed;
+        if (!saveExistingProfile(changed)) return;
         if (changed && NekoGui::dataStore->started_id == ent->id) msg << "restart";
     }
 
@@ -458,12 +487,12 @@ void DialogEditProfile::on_apply_to_group_clicked() {
             return;
         }
         // save this
-        if (onEnd()) {
-            ent->Save();
-        } else {
+        if (!onEnd()) {
             MessageBoxWarning("failed", "failed to save");
             return;
         }
+        bool changed;
+        if (!saveExistingProfile(changed)) return;
         // copy keys
         for (const auto &pair: apply_to_group_ui) {
             if (pair.second->isChecked()) {
@@ -483,7 +512,7 @@ void DialogEditProfile::do_apply_to_group(const std::shared_ptr<NekoGui::Group> 
         for (const auto &profile: group->Profiles()) {
             auto newStream = GetStreamSettings(profile->bean.get());
             if (newStream == nullptr) continue;
-            if (stream == newStream) continue;
+            if (profile == originalEnt) continue;
             newStream->_setValue(stream->_name(p), p);
             // qDebug() << newStream->ToJsonBytes();
             profile->Save();
@@ -492,7 +521,7 @@ void DialogEditProfile::do_apply_to_group(const std::shared_ptr<NekoGui::Group> 
 
     auto copyBean = [=](void *p) {
         for (const auto &profile: group->Profiles()) {
-            if (profile == ent) continue;
+            if (profile == originalEnt) continue;
             profile->bean->_setValue(ent->bean->_name(p), p);
             // qDebug() << profile->bean->ToJsonBytes();
             profile->Save();
