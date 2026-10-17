@@ -2,6 +2,7 @@
 #include "fmt/Preset.hpp"
 
 #include <QFile>
+#include <QSaveFile>
 #include <QDir>
 #include <QApplication>
 #include <QFileInfo>
@@ -181,21 +182,33 @@ namespace NekoGui_ConfigItem {
         FromJson(document.object());
     }
 
-    bool JsonStore::Save() {
+    JsonStore::SaveResult JsonStore::SaveChecked() {
         if (callback_before_save != nullptr) callback_before_save();
-        if (save_control_no_save) return false;
+        if (save_control_no_save) return {SaveResult::Status::Disabled, false};
 
-        auto save_content = ToJsonBytes();
-        auto changed = last_save_content != save_content;
+        const auto save_content = ToJsonBytes();
+        const auto changed = last_save_content != save_content;
+        QSaveFile file(fn);
+        // Internal config must never fall back to destructive truncate/write.
+        file.setDirectWriteFallback(false);
+        if (!file.open(QIODevice::WriteOnly)) return {SaveResult::Status::OpenError, changed};
+        if (file.write(save_content) != save_content.size()) {
+            file.cancelWriting();
+            return {SaveResult::Status::WriteError, changed};
+        }
+        if (!file.commit()) return {SaveResult::Status::CommitError, changed};
+        // A failed attempt must not poison the next changed/retry decision.
         last_save_content = save_content;
+        return {SaveResult::Status::Saved, changed};
+    }
 
-        QFile file;
-        file.setFileName(fn);
-        file.open(QIODevice::ReadWrite | QIODevice::Truncate);
-        file.write(save_content);
-        file.close();
-
-        return changed;
+    bool JsonStore::Save() {
+        const auto result = SaveChecked();
+        if (!result.ok() && result.status != SaveResult::Status::Disabled) {
+            // Never expose config paths, credentials or document contents.
+            qWarning("JSON_STORE_SAVE_FAILED stage=%d", static_cast<int>(result.status));
+        }
+        return result.changed;
     }
 
     bool JsonStore::Load() {

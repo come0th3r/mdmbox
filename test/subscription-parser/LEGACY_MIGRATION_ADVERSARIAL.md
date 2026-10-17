@@ -4,6 +4,12 @@ Status, 2026-10-17: **observations COMPLETE, repeated; migration acceptance NOT_
 This test records existing behavior, including unsafe behavior. It does not fix
 production persistence or approve data loss as a migration policy.
 
+**Historical evidence below is MIG-05/R1, before the production save fix.**
+MIG-06/R1 now uses checked atomic per-file persistence and keeps cache unchanged
+on failure; current fixture marker adds `persistence=atomic-v1`. See
+`LEGACY_PERSISTENCE.md` for current implementation, exact new hashes and reruns.
+The legacy malformed/orphan/duplicate load observations below still apply.
+
 ## Scope and safety
 
 `LegacyMigrationAdversarial.hpp` reuses the production-graph parser executable

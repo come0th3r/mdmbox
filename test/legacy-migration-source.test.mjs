@@ -155,7 +155,7 @@ test('adversarial fixture remains owned, offline and explicitly characterizes di
   const edge = readFileSync(new URL('./subscription-parser/LegacyMigrationAdversarial.hpp', import.meta.url), 'utf8');
   for (const name of adversarialCases) assert.ok(edge.includes(`"${name}"`));
   assert.match(edge, /ERROR_SHARING_VIOLATION/);
-  assert.match(edge, /profile->last_save_content == intended/);
+  assert.match(edge, /profile->last_save_content == cacheBefore/);
   assert.match(edge, /after == before/);
   assert.match(edge, /seed != originalSeed/);
   assert.match(edge, /candidate != current/);
@@ -169,4 +169,23 @@ test('adversarial fixture remains owned, offline and explicitly characterizes di
   assert.match(source, /role != "candidate" \|\| absent != QSet<QString>\{"profiles\/205.json"\}/);
   const main = entrypoint.slice(entrypoint.indexOf('int main('));
   assert.ok(main.indexOf('LegacyMigrationAdversarial::run(app)') < main.indexOf('QApplication app('));
+});
+
+test('checked save uses atomic commit without destructive fallback or premature cache update', () => {
+  const implementation = readFileSync(new URL('../main/NekoGui.cpp', import.meta.url), 'utf8');
+  const api = readFileSync(new URL('../main/NekoGui_ConfigItem.hpp', import.meta.url), 'utf8');
+  const body = implementation.slice(implementation.indexOf('JsonStore::SaveResult JsonStore::SaveChecked()'),
+    implementation.indexOf('bool JsonStore::Load()'));
+  assert.match(api, /\[\[nodiscard\]\] SaveResult SaveChecked\(\)/);
+  assert.match(body, /QSaveFile file\(fn\)/);
+  assert.match(body, /setDirectWriteFallback\(false\)/);
+  assert.match(body, /file.write\(save_content\) != save_content.size\(\)/);
+  assert.match(body, /file.cancelWriting\(\)/);
+  assert.ok(body.indexOf('if (!file.commit())') < body.indexOf('last_save_content = save_content'));
+  assert.match(body, /return result.changed/);
+  assert.match(body, /JSON_STORE_SAVE_FAILED stage=%d/);
+  assert.doesNotMatch(body, /Truncate|errorString\(/);
+  const edge = readFileSync(new URL('./subscription-parser/LegacyMigrationAdversarial.hpp', import.meta.url), 'utf8');
+  assert.ok(edge.indexOf('edge-retry-immediate') < edge.indexOf('const auto unchanged ='));
+  assert.ok(edge.indexOf('edge-nochange-immediate') < edge.indexOf('const bool wrapperChanged ='));
 });

@@ -61,6 +61,20 @@ namespace NekoGui_ConfigItem {
 
         void FromJsonBytes(const QByteArray &data);
 
+        struct SaveResult {
+            enum class Status { Saved, Disabled, OpenError, WriteError, CommitError };
+            Status status;
+            bool changed;
+
+            [[nodiscard]] bool ok() const { return status == Status::Saved; }
+        };
+
+        // Checked per-file persistence. No filenames, profile data or OS error
+        // text in the result. Disabled is not a successful disk write.
+        [[nodiscard]] SaveResult SaveChecked();
+
+        // Compatibility: returns content-changed, NOT I/O success. New callers
+        // that decide whether to apply a saved configuration use SaveChecked.
         bool Save();
 
         bool Load();

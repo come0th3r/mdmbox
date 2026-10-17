@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 export const passMarker = 'LEGACY_MIGRATION_VALID_ROOT_REOPEN_PASS children=2 guards=4 seed_files=15';
-export const observationMarker = 'LEGACY_MIGRATION_ADVERSARIAL_OBSERVATIONS_COMPLETE cases=7 children=16 guards=35 acceptance=NOT_ACCEPTED';
+export const observationMarker = 'LEGACY_MIGRATION_ADVERSARIAL_OBSERVATIONS_COMPLETE cases=7 children=16 guards=35 persistence=atomic-v1 acceptance=NOT_ACCEPTED';
 export const adversarialCases = ['malformed-profile', 'invalid-type', 'malformed-group', 'orphan-profile',
   'duplicate-id', 'duplicate-order', 'write-lock'];
 

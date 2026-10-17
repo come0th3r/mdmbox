@@ -3,6 +3,9 @@
 Status: **valid-root slice built and executed twice: PASS, 2026-10-17**. This is a
 bounded Stage 0 compatibility test, not a schema migration or reorder acceptance.
 
+Subsequent production per-file save fix and current rerun evidence:
+`LEGACY_PERSISTENCE.md`. The original execution/hash records below remain historical.
+
 ## Coordinator-approved boundary
 
 - Reuse the production-graph parser executable, with a separate early CLI branch

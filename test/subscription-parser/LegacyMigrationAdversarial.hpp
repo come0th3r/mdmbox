@@ -2,7 +2,8 @@
 
 #include "LegacyMigrationFixture.hpp"
 
-// Characterization, not approval of legacy repair or transactional recovery.
+// Characterization of legacy load plus checked per-file save regression.
+// Not approval of legacy repair or transactional recovery.
 // Every case starts from a new owned synthetic seed and disposable candidate.
 namespace LegacyMigrationAdversarial {
 using namespace LegacyMigrationFixture;
@@ -121,11 +122,15 @@ inline bool lockedSave() {
     QByteArray before, after;
     if (!readFile(path, before)) return false;
     profile->latency = 88;
-    const auto intended = profile->ToJsonBytes();
+    const auto cacheBefore = profile->last_save_content;
+    const auto result = profile->SaveChecked();
     const bool reportedChanged = profile->Save();
-    // Save returns "changed", not successful I/O: prove both the misleading
-    // return/cache update and exact preservation of the blocked disk file.
-    return reportedChanged && profile->last_save_content == intended &&
+    // Wrapper keeps changed semantics, checked API reports the disk failure.
+    // Neither failed attempt may update the successful-persistence cache.
+    using Status = JsonStore::SaveResult::Status;
+    return !result.ok() && result.changed &&
+        (result.status == Status::OpenError || result.status == Status::CommitError) &&
+        reportedChanged && profile->last_save_content == cacheBefore &&
         readFile(path, after) && after == before &&
         QJsonDocument::fromJson(after).object() != profile->ToJson();
 #else
@@ -179,7 +184,50 @@ inline int child(const QStringList &args) {
         if (phase == "retry") {
             auto profile = profileManager->GetProfile(41);
             profile->latency = 88;
-            profile->Save();
+            const auto cacheBefore = profile->last_save_content;
+            const auto path = profile->fn;
+            // Deterministic open failure, no directory creation or ACL edits.
+            profile->fn = "missing-synthetic-parent/profile.json";
+            const auto failed = profile->SaveChecked();
+            Manifest failedFiles;
+            if (failed.ok() || failed.status != JsonStore::SaveResult::Status::OpenError ||
+                !failed.changed || profile->last_save_content != cacheBefore ||
+                !snapshot(workspace, "candidate", token, failedFiles) || failedFiles != before) return fail("edge-open-failure");
+            profile->fn = path;
+            int callbacks = 0;
+            profile->callback_before_save = [&callbacks, target = profile.get()] {
+                ++callbacks;
+                if (callbacks == 2) target->latency = 88;
+            };
+            struct ResetCallback {
+                JsonStore *store;
+                ~ResetCallback() { store->callback_before_save = nullptr; }
+            } resetCallback{profile.get()};
+            profile->save_control_no_save = true;
+            const auto disabled = profile->SaveChecked();
+            profile->save_control_no_save = false;
+            Manifest disabledFiles;
+            if (disabled.ok() || disabled.status != JsonStore::SaveResult::Status::Disabled ||
+                disabled.changed || callbacks != 1 || profile->last_save_content != cacheBefore ||
+                !snapshot(workspace, "candidate", token, disabledFiles) || disabledFiles != before) return fail("edge-disabled-save");
+            profile->latency = 87; // Callback must affect this very save, not the next one.
+            const auto retried = profile->SaveChecked();
+            Manifest retriedFiles;
+            if (!retried.ok() || !retried.changed || callbacks != 2 || profile->latency != 88 ||
+                profile->last_save_content != profile->ToJsonBytes() ||
+                !snapshot(workspace, "candidate", token, retriedFiles) ||
+                QJsonDocument::fromJson(retriedFiles.value(profile->fn)).object() != profile->ToJson()) return fail("edge-retry-immediate");
+            auto allowedRetry = before;
+            allowedRetry[profile->fn] = retriedFiles.value(profile->fn);
+            if (retriedFiles != allowedRetry || retriedFiles == before) return fail("edge-retry-delta");
+            const auto unchanged = profile->SaveChecked();
+            Manifest unchangedFiles;
+            if (!unchanged.ok() || unchanged.changed || callbacks != 3 ||
+                profile->last_save_content != profile->ToJsonBytes() ||
+                !snapshot(workspace, "candidate", token, unchangedFiles) || unchangedFiles != retriedFiles) return fail("edge-nochange-immediate");
+            const bool wrapperChanged = profile->Save();
+            profile->callback_before_save = nullptr;
+            if (wrapperChanged || callbacks != 4 || profile->last_save_content != profile->ToJsonBytes()) return fail("edge-checked-retry");
             Manifest saved;
             if (!snapshot(workspace, "candidate", token, saved) ||
                 QJsonDocument::fromJson(saved.value(profile->fn)).object() != profile->ToJson()) return fail("edge-retry-readback");
@@ -265,7 +313,7 @@ inline int run(QCoreApplication &app) {
     if (args.size() > 1 && args[1] == "--legacy-migration-edge-child") return child(args);
     if (args != QStringList{args.first(), "--legacy-migration-adversarial"}) return fail("edge-parent-arguments", 64);
     for (const auto &testCase : cases()) if (runCase(testCase) != 0) return 1;
-    QTextStream(stdout) << "LEGACY_MIGRATION_ADVERSARIAL_OBSERVATIONS_COMPLETE cases=7 children=16 guards=35 acceptance=NOT_ACCEPTED\n";
+    QTextStream(stdout) << "LEGACY_MIGRATION_ADVERSARIAL_OBSERVATIONS_COMPLETE cases=7 children=16 guards=35 persistence=atomic-v1 acceptance=NOT_ACCEPTED\n";
     return 0;
 }
 } // namespace LegacyMigrationAdversarial
