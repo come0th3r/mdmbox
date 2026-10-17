@@ -96,3 +96,6 @@ ninja_last.log
 
 .vs
 out
+
+# Local test subscription credentials (never commit)
+/.env.mikan-test.local
