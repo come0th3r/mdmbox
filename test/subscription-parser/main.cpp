@@ -1,8 +1,13 @@
+#ifdef _WIN32
+#include <windows.h> // Before project enum names and Qt's interface macro.
+#endif
 #include "sub/GroupUpdater.hpp"
 #include "db/ConfigBuilder.hpp"
 #include "fmt/CustomBean.hpp"
 #include "ExternalProcessFixture.hpp"
 #include "CoreProcessFixture.hpp"
+#include "LegacyMigrationFixture.hpp"
+#include "LegacyMigrationAdversarial.hpp"
 #include <QTimer>
 #include <QApplication>
 #include <QDir>
@@ -23,6 +28,14 @@ public:
 };
 
 int main(int argc, char **argv) {
+    // Keep the offline migration branch before QApplication and every other
+    // fixture. Malformed migration arguments fail closed, never fall through.
+    if (argc > 1 && QString::fromLocal8Bit(argv[1]).startsWith(QStringLiteral("--legacy-migration"))) {
+        QCoreApplication app(argc, argv);
+        if (app.arguments().value(1) == "--legacy-migration-adversarial" ||
+            app.arguments().value(1) == "--legacy-migration-edge-child") return LegacyMigrationAdversarial::run(app);
+        return LegacyMigrationFixture::run(app);
+    }
     if (argc == 2 && QString::fromLocal8Bit(argv[1]) == QStringLiteral("--daemon-event-child")) {
         QCoreApplication child(argc, argv);
         QTextStream(stdout) << "grpc server listening\n" << Qt::flush;
