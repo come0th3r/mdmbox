@@ -106,7 +106,11 @@ because SSH token bypassed deny. R3 listing fixture corrected, inherited write-A
 test FAIL. R4 replaced that unreliable test with real NewOnly collision. Failed
 owned synthetic roots are retained, not broadly cleaned.
 
-Restore/rollback/startup gating, identity validation/quarantine, caller SaveChecked
+Subsequent MIG-09/R2 adds detached raw Restore/VerifyRestored with actual owned
+child-kill/retry fixtures: `LEGACY_RESTORE.md`. This does not retroactively change
+MIG-08 evidence or add appdata switching/rollback/startup integration.
+
+Appdata activation/rollback/startup gating, identity validation/quarantine, caller SaveChecked
 propagation, cross-writer coordination, actual kill/interruption, disk-full/short-
 write,8MiB/64MiB boundary execution, reparse/alias runtime matrix, installer
 upgrade/uninstall and clean-checkout reproduction: **NOT RUN / not implemented**.

@@ -4,7 +4,7 @@ import { linkSync, mkdtempSync, readFileSync, unlinkSync, rmdirSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
-import { acceptedResult, adversarialCases, backupMarker, checkedExecutable, inspectFixture, observationMarker, parseArguments, passMarker } from '../tools/test-legacy-migration.mjs';
+import { acceptedResult, adversarialCases, backupMarker, restoreMarker, checkedExecutable, inspectFixture, observationMarker, parseArguments, passMarker } from '../tools/test-legacy-migration.mjs';
 
 const { files, source, entrypoint } = inspectFixture();
 const groups = Object.entries(files).filter(([path]) => /^groups[/][0-9]+[.]json$/.test(path));
@@ -234,5 +234,32 @@ test('backup primitive preserves raw files and publishes manifest only after sou
   const fixture = readFileSync(new URL('./subscription-parser/LegacyBackupFixture.hpp', import.meta.url), 'utf8');
   for (const code of ['backup-corruption', 'backup-incomplete', 'backup-bad-manifest', 'backup-link-refusal',
     'backup-read-lock', 'backup-child-negative', 'backup-bytes']) assert.ok(fixture.includes(code));
+  assert.doesNotMatch(fixture, /removeRecursively/);
+});
+
+test('restore launcher stays pinned and accepts only its detached non-acceptance marker', () => {
+  const executable = resolve('synthetic-runner.exe'), sha256 = 'a'.repeat(64);
+  assert.deepEqual(parseArguments(['--runner', executable, '--sha256', sha256, '--restore']), { executable, sha256, restore: true });
+  assert.throws(() => parseArguments(['--runner', executable, '--sha256', sha256, '--restore', '--backup']));
+  const good = { status: 0, signal: null, stdout: restoreMarker + '\n', stderr: '' };
+  assert.equal(acceptedResult(good, false, false, true), true);
+  assert.equal(acceptedResult(good), false);
+  assert.equal(acceptedResult(good, false, true, true), false);
+  for (const change of [{ stdout: passMarker }, { stdout: backupMarker }, { status: 1 },
+    { stdout: restoreMarker + '\n' + restoreMarker }, { stderr: 'LEGACY_MIGRATION_FAIL' }]) {
+    assert.equal(acceptedResult({ ...good, ...change }, false, false, true), false);
+  }
+});
+
+test('restore validates copied bytes before publishing readiness and exercises owned child kill', () => {
+  const api = readFileSync(new URL('../db/LegacyBackup.hpp', import.meta.url), 'utf8');
+  assert.match(api, /copied != files/);
+  assert.ok(api.indexOf('copied != files') < api.indexOf('QSaveFile ready'));
+  assert.match(api, /hash\(marker\) != manifestSha256/);
+  assert.match(api, /afterMarker != marker/);
+  const fixture = readFileSync(new URL('./subscription-parser/LegacyRestoreFixture.hpp', import.meta.url), 'utf8');
+  for (const code of ['restore-roundtrip', 'restore-corrupt-refusal', 'restore-partial-conflict',
+    'restore-interrupt-preservation', 'restore-digest-refusal', 'restore-retry']) assert.ok(fixture.includes(code));
+  assert.match(fixture, /interrupted\.kill\(\)/);
   assert.doesNotMatch(fixture, /removeRecursively/);
 });

@@ -19,7 +19,7 @@
 #endif
 
 // Explicit, offline legacy-directory backup primitive. Not called by startup,
-// not a restore/migration API. Caller must quiesce ALL writers and choose a
+// not a startup migration API. Caller must quiesce ALL writers and choose a
 // private backup parent (snapshots contain secrets with inherited Windows ACLs).
 namespace NekoGui::LegacyBackup {
 enum class Status { Verified, UnsafePath, SourceError, WriteError, SourceChanged, InvalidBackup };
@@ -38,6 +38,17 @@ inline constexpr int MaxFiles = 4096;
 // At most 255 UTF-16 units per leaf, including JSON escaping overhead.
 inline constexpr qint64 MaxManifestBytes = 8 * 1024 * 1024;
 inline const QStringList Directories{"groups", "profiles", "routes_box"};
+
+// Canonical path components, including a volume root already ending in '/'.
+inline bool within(const QString &path, const QString &root) {
+#ifdef Q_OS_WIN
+    const auto sensitivity = Qt::CaseInsensitive;
+#else
+    const auto sensitivity = Qt::CaseSensitive;
+#endif
+    return path.compare(root, sensitivity) == 0 ||
+        path.startsWith(root.endsWith('/') ? root : root + '/', sensitivity);
+}
 
 inline bool leaf(const QString &name) {
     if (name.isEmpty() || name.size() > 255 || name == "." || name == ".." || name.endsWith('.') || name.endsWith(' ')) return false;
@@ -212,12 +223,7 @@ template<typename Writer>
     if (!plain(sourceRoot, true) || !plain(backupParent, true)) return {Status::UnsafePath, {}};
     const auto source = QFileInfo(sourceRoot).canonicalFilePath();
     const auto parent = QFileInfo(backupParent).canonicalFilePath();
-#ifdef Q_OS_WIN
-    const auto sensitivity = Qt::CaseInsensitive;
-#else
-    const auto sensitivity = Qt::CaseSensitive;
-#endif
-    if (parent.compare(source, sensitivity) == 0 || parent.startsWith(source + '/', sensitivity)) return {Status::UnsafePath, {}};
+    if (within(parent, source)) return {Status::UnsafePath, {}};
     Files before;
     if (!scan(source, before)) return {Status::SourceError, {}};
     const auto bytes = manifest(before);
@@ -246,5 +252,66 @@ template<typename Writer>
 
 [[nodiscard]] inline Result Create(const QString &sourceRoot, const QString &backupParent) {
     return Detail::create(sourceRoot, backupParent, Detail::writeNew);
+}
+
+// Readiness check for a detached restored tree, NOT approval to run a loader or
+// overwrite appdata. Caller pins the manifest digest from its verified backup.
+[[nodiscard]] inline Result VerifyRestored(const QString &directory, const QByteArray &manifestSha256) {
+    using namespace Detail;
+    if (manifestSha256.size() != 64) return {Status::InvalidBackup, {}};
+    for (const auto ch : manifestSha256) if (!(ch >= '0' && ch <= '9') && !(ch >= 'a' && ch <= 'f')) return {Status::InvalidBackup, {}};
+    QStringList entries;
+    auto expected = Directories;
+    expected.append(".restore-manifest.json");
+    expected.sort(Qt::CaseSensitive);
+    Files files;
+    QByteArray marker;
+    if (!names(directory, entries) || entries != expected || !scan(directory, files) ||
+        !read(directory + "/.restore-manifest.json", marker, MaxManifestBytes) ||
+        hash(marker) != manifestSha256 || marker != manifest(files)) return {Status::InvalidBackup, {}};
+    return {Status::Verified, QFileInfo(directory).canonicalFilePath()};
+}
+
+namespace Detail {
+template<typename Writer>
+[[nodiscard]] inline Result restore(const QString &backupDirectory, const QString &restoreParent, Writer writer) {
+    if (!plain(backupDirectory, true) || !plain(restoreParent, true)) return {Status::UnsafePath, {}};
+    const auto backup = QFileInfo(backupDirectory).canonicalFilePath();
+    const auto parent = QFileInfo(restoreParent).canonicalFilePath();
+    // No writes within the backup or its ancestors. Existing siblings survive.
+    if (within(parent, backup) || within(backup, parent)) return {Status::UnsafePath, {}};
+    if (!Verify(backup).ok()) return {Status::InvalidBackup, {}};
+    Files files;
+    QByteArray marker;
+    // Revalidate the exact bytes that will be copied, not a prior Verify scan.
+    if (!scan(backup + "/payload", files) || !read(backup + "/manifest.json", marker, MaxManifestBytes) ||
+        marker != manifest(files)) return {Status::InvalidBackup, {}};
+    const auto digest = hash(marker);
+    const auto name = "legacy-restore-" + QUuid::createUuid().toString(QUuid::Id128);
+    const auto target = parent + '/' + name;
+    if (!QDir(parent).mkdir(name) || !plain(target, true)) return {Status::WriteError, {}};
+#ifndef Q_OS_WIN
+    if (!QFile::setPermissions(target, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner)) return {Status::WriteError, {}};
+#endif
+    for (const auto &dir : Directories) if (!QDir(target).mkdir(dir)) return {Status::WriteError, {}};
+    for (auto it = files.begin(); it != files.end(); ++it) {
+        if (!writer(target + '/' + it.key(), it.value())) return {Status::WriteError, {}};
+    }
+    Files copied, after;
+    QByteArray afterMarker;
+    if (!scan(target, copied) || copied != files) return {Status::WriteError, {}};
+    if (!Verify(backup).ok() || !scan(backup + "/payload", after) || after != files ||
+        !read(backup + "/manifest.json", afterMarker, MaxManifestBytes) || afterMarker != marker) return {Status::SourceChanged, {}};
+    QSaveFile ready(target + "/.restore-manifest.json");
+    ready.setDirectWriteFallback(false);
+    if (!ready.open(QIODevice::WriteOnly) || ready.write(marker) != marker.size() || !ready.commit()) return {Status::WriteError, {}};
+    return VerifyRestored(target, digest);
+}
+} // namespace Detail
+
+// Restore to a NEW private detached directory only. Retain partial attempts on
+// failure; never delete, switch, load or overwrite existing application data.
+[[nodiscard]] inline Result Restore(const QString &backupDirectory, const QString &restoreParent) {
+    return Detail::restore(backupDirectory, restoreParent, Detail::writeNew);
 }
 } // namespace NekoGui::LegacyBackup

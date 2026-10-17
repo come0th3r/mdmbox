@@ -9,6 +9,7 @@
 #include "LegacyMigrationFixture.hpp"
 #include "LegacyMigrationAdversarial.hpp"
 #include "LegacyBackupFixture.hpp"
+#include "LegacyRestoreFixture.hpp"
 #include <QTimer>
 #include <QApplication>
 #include <QDir>
@@ -33,6 +34,9 @@ int main(int argc, char **argv) {
     // fixture. Malformed migration arguments fail closed, never fall through.
     if (argc > 1 && QString::fromLocal8Bit(argv[1]).startsWith(QStringLiteral("--legacy-migration"))) {
         QCoreApplication app(argc, argv);
+        if (app.arguments().value(1) == "--legacy-migration-restore" ||
+            app.arguments().value(1) == "--legacy-migration-restore-child" ||
+            app.arguments().value(1) == "--legacy-migration-restore-interrupt-child") return LegacyRestoreFixture::run(app);
         if (app.arguments().value(1) == "--legacy-migration-backup" ||
             app.arguments().value(1) == "--legacy-migration-backup-verify-child") return LegacyBackupFixture::run(app);
         if (app.arguments().value(1) == "--legacy-migration-adversarial" ||

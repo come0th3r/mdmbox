@@ -131,6 +131,16 @@ Evidence/limits: `test/subscription-parser/LEGACY_BACKUP.md`. Not startup gating
 whole-appdata backup, restore/rollback, actual interruption or migration acceptance.
 Writers must be quiesced; private Windows ACLs are caller-owned.
 
+### MIG-09/R2 detached raw restore
+
+Explicit Restore/VerifyRestored creates a fresh private directory, not an appdata
+overwrite. Verified backup before writes, exact copied/source rechecks, last atomic
+readiness marker pinned to manifest digest; partial attempts remain unready.
+Windows Release build and two runs PASS, including actual child kill after first
+checked write, retry alongside retained partial, corruption and source mutation.
+Evidence: `test/subscription-parser/LEGACY_RESTORE.md`. No loader activation,
+startup gating, appdata switching, rollback or full migration acceptance.
+
 ## 2.3 Required legacy-data invariants for acceptance fixtures
 
 Fixtures should cover both data preservation and the existing loader's repair
