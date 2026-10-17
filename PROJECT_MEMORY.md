@@ -25,7 +25,7 @@
 
 ## Текущий статус
 
-Последний проверенный baseline перед MIG-07 commit **2026-10-17**: `beta-ilya`, HEAD `20fdca629acf1164fef14e125a697d0daae7b9dd`, ahead 6; staged diff в начале пуст. `435d8da` — migration fixtures, `dffc6b0` — atomic-save fix, `20fdca6` — handoff/Stage 0 drafts; все сделаны через **Fork GUI**, index подготовлен точечно Git CLI. MIG-07/R2 source совпадает с exact executed snapshot; сохраняется отдельным локальным commit через Fork. Worktree содержит многочисленные прежние backend, shell UI, alpha/notices, fixtures, screenshots и документы; не чистить/не включать в task commits. Перед следующим действием заново проверить branch/HEAD/status/staged diff. Push не разрешён.
+Последний проверенный baseline перед MIG-08 commit **2026-10-17**: `beta-ilya`, HEAD `f912b3126a8d9c4b53365b4e723006b7970adc8b`, ahead7; index в начале пуст. MIG-07/R2 сохранён этим локальным commit через **Fork GUI**, как и предыдущие migration commits; index подготовлен точечно Git CLI. MIG-08/R4 executable source совпадает с выполненным snapshot; подготовка отдельного локального commit через Fork. Worktree содержит многочисленные прежние backend, shell UI, alpha/notices, fixtures, screenshots и документы; не чистить/не включать в task commits. Перед следующим действием заново проверить branch/HEAD/status/staged diff. Push не разрешён.
 
 Этапы 0–4 не считать целиком закрытыми. Основные компоненты уже существуют, но обязательные protocol, visual, system, packaging и release gates остаются открытыми.
 
@@ -48,13 +48,15 @@
 - **MIG-07/R2 rejected-profile preservation:** loader больше не удаляет rejected profiles, сохраняет filename IDs зарезервированными даже при пустом graph; skipped count/sanitized warning. Stale DeleteProfile вне loaded graph — no-op; Add отказывает при существующем destination; reorder отказывает при rejected input. Default group при всех damaged groups всё ещё создаётся (выше max ID), это не глобально read-only loader. Second Load/sentinel проверяются, full schema validation/backup/quarantine не добавлены.
 - **MIG-07/R2 evidence:** `C:/Users/build/mdmbox-build/mdm-mig07-m2gnBC-r2`, 494 hashes неизменны, manifest `7a24b10818b98b12350090d1708ab3874a57e7c9c44cdab841c2a270d7c5d2a5`, runner `4f84e73084e1dafa860d9afa161807b36f7369ff4e2374aab41f12d04a248516`. Windows Release build PASS, 11 cases дважды COMPLETE (24+55 children каждый), valid-root до/после PASS, всего 170 children; seed/cleanup/no remaining artifact processes подтверждены. Remote tests16/16, local30/30, syntax/inspect PASS. Review F1 namespace и F2 coverage закрыты static R2; P3 in-memory oracle all-invalid-groups ограничен, disk oracle полный. Dirty snapshot, не clean checkout; details `test/subscription-parser/LEGACY_LOAD_PRESERVATION.md`.
 
+- **MIG-08/R4 offline backup:** `db/LegacyBackup.hpp` Create/Verify raw legacy groups/profiles/routes_box; originals не перемещаются, NewOnly/readback/source recheck/last QSaveFile manifest, error-aware listing, bounds4096/8MiB/64MiB/manifest8MiB. Не full-appdata/startup/restore; writers quiesced, private inherited Windows ACL caller responsibility. Windows Release build PASS; backup дважды PASS (ACL source/backup denial, partial NewOnly collision, corruption,4096 long names/fresh Verify/4097 refusal), valid-root до/после и adversarial дважды PASS;176 children sequence.496 input hashes неизменны; remote18/18, local32/32, syntax/inspect PASS, success owned cleanup/no remaining exact-artifact processes. Remote `C:/Users/build/mdmbox-build/mdm-mig08-77rWLi-r4`, manifest `5e824d35c1c5d5e52564f85ae9dfa8ed6389fd1a94777845f31b885bd76abe37`, runner `0443a0076f63c128cfb326c0fdb0a7d65b914775711792e7c668b89e3bd711e4`. Dirty snapshot; full limits/failed attempts in `test/subscription-parser/LEGACY_BACKUP.md`. Review F1/F2 closed static; R1/R2 ACL tests FAIL, R3 write-denial FAIL, R4 corrected fixture PASS; failed synthetic roots retained.
+
 ### Открытые блокеры
 
 - Provider/geodata provisioning, cache/update/offline fallback; реальные DNS/FakeIP/process routing и traffic semantics.
 - Большинство mikan-протоколов, включая REALITY UDP, XHTTP/gRPC, Hysteria2/TUIC и остальные строки матрицы.
 - Cross-writer latest-wins/revocation policy и атомарность disk/runtime при изменениях подписки.
 - Managed TUN/system proxy, kill switch, OS state/recovery; полная migration и install/upgrade/uninstall.
-- Legacy migration safety: MIG-07 устраняет удаление rejected profiles при load, но нет verified backup/quarantine/rollback и полного schema/identity validation. MIG-06 даёт checked per-file save; callers/UI failure propagation и cross-store rollback открыты. Interruption/disk-full/short-write, успешный reorder и concurrent no-clobber NOT RUN. QFile::exists guard не atomic create-if-absent.
+- Legacy migration safety: MIG-07 устраняет удаление rejected profiles при load; MIG-08 даёт bounded offline verified backup без startup gating, но restore/quarantine/rollback и full schema/identity validation не реализованы. MIG-06 даёт checked per-file save; callers/UI failure propagation и cross-store rollback открыты. Actual interruption/disk-full/short-write, successful reorder,8MiB/64MiB bounds,reparse/alias matrix и concurrent no-clobber NOT RUN. QFile::exists guard не atomic create-if-absent.
 - Figma references/assets manifest, pixel-diff всех пяти экранов в Qt WebEngine, native captures и DPI matrix.
 - Чистое воспроизведение baseline текущего HEAD, полный release package/clean-VM gates, лицензии/source offers, CI/tag/release.
 
@@ -68,7 +70,7 @@
 2. Этап 1: закрыть subscription metadata/errors/scheduler/HWID и last-known-good/atomic apply; затем provider/geodata policy и runtime behavior, routing/DNS semantics, autotune/revocation и оставшуюся mikan protocol matrix. Для каждого пункта — synthetic/local fixtures либо изолированный тестовый стенд, без live-панели и внешних узлов.
 3. Только после приемки этапов 0 и 1 переходить к UI/интеграционным и визуальным работам этапов 2–3, затем к release gates этапа 4.
 
-Следующий шаг: определить verified backup/restore policy с synthetic corruption/interruption/rollback fixtures; не перемещать preserved originals без отдельного проверенного контракта. Распространить SaveChecked ошибки в callers без смешивания changed с success; текущие warning/count не полноценная обработка ошибки. Отдельно остаются INT_MAX/second-read race/AddGroup stale-path runtime и P3 усиление all-invalid-groups memory oracle. Destructive reorder держать отключённым. Использовать `build@192.168.1.36`, отдельные owned build dirs; существующие checkouts и clean-стенд не перезаписывать. Clean-checkout baseline, contracts/manifests и mikan stand этапа 0 остаются открытыми.
+Следующий шаг: bounded offline backup MIG-08 проверен; определить безопасный explicit restore в новый owned destination и corruption/interruption/rollback acceptance, затем startup gating. Не перемещать preserved originals без отдельного проверенного контракта. Распространить SaveChecked ошибки в callers без смешивания changed с success; текущие warning/count не полноценная обработка ошибки. Отдельно остаются INT_MAX/second-read race/AddGroup stale-path runtime и P3 усиление all-invalid-groups memory oracle. Destructive reorder держать отключённым. Использовать `build@192.168.1.36`, отдельные owned build dirs; существующие checkouts и clean-стенд не перезаписывать. Clean-checkout baseline, contracts/manifests и mikan stand этапа 0 остаются открытыми.
 
 ## План подключения сабагентов
 
@@ -83,6 +85,8 @@ MIG-05 reviewer `ses_eb642defcffe37pUMJdCBN3HoM`: read-only C++ review + targete
 MIG-06 reviewer `ses_eb61ae3c2ffeTzi8qZf69Xc4IP`: статический review production API и fixture, no confirmed production P0–P2; P2 отложенного retry readback исправлен и закрыт targeted R1. Runtime exact R1 выполнил координатор после rereview. Independent UI review BLOCKED permissions; JS вне scope. Новых permission-canary/override checks не выполнено; прежние canaries не считать проверкой этой session.
 
 MIG-07 reviewer `ses_eb6040d8bffevIoga74fLwNglC`: read-only DB/fixture review + targeted R2, F1/F2 CLOSED static, новых confirmed P0–P2 нет. P3 all-invalid-group graph oracle слабее disk checks. Build-file read BLOCKED permissions, UI/JS не проверялись; exact Windows R2 runtime выполнил координатор. Новые permission-canary/session override checks не выполнялись.
+
+MIG-08 reviewer `ses_eb5f2b58affeYaHUHjB4DViPnW`: initial F1 listing P1/F2 manifest P2 исправлены и закрыты static R1; final R4 delta no new confirmed P0–P2. P3 unchecked privilege restoration ограничен fixture diagnostics. Reviewer не проверял JS/UI/build files, runtime/provenance; coordinator exact R4 build/runtime отдельно PASS. Permission overrides/canaries заново не проверялись.
 
 ## Ограничения работы
 

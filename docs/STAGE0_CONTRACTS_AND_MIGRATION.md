@@ -121,6 +121,16 @@ valid-root before/after PASS. Evidence and review limits:
 slice is verified; verified backup/rollback, concurrency and caller recovery remain
 open. The preceding MIG-05/MIG-06 results describe their historical snapshots.
 
+### MIG-08/R4 bounded offline backup
+
+Explicit LegacyBackup Create/Verify copies raw files in three required legacy
+directories without moving originals; error-aware listing, NewOnly payload and
+last atomic canonical manifest. Windows Release build and two backup runs PASS,
+including ACL listing denial, partial NewOnly conflict and4096 long-name files.
+Evidence/limits: `test/subscription-parser/LEGACY_BACKUP.md`. Not startup gating,
+whole-appdata backup, restore/rollback, actual interruption or migration acceptance.
+Writers must be quiesced; private Windows ACLs are caller-owned.
+
 ## 2.3 Required legacy-data invariants for acceptance fixtures
 
 Fixtures should cover both data preservation and the existing loader's repair

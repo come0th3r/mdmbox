@@ -124,6 +124,8 @@ C++17 / Qt 6 — сервисы приложения и модели Nekobox
 
 **Готовность этапа:** чистый checkout собирается по документированной команде; известны исходные дефекты, версии и список поддерживаемых функций.
 
+**MIG-08/R4, 2026-10-17:** отдельный offline Create/Verify backup трёх legacy-каталогов, без перемещения оригиналов и startup integration. Windows Release build и два backup-прогона PASS: ACL listing refusal, partial NewOnly conflict, corruption и4096 long-name files/fresh Verify. Evidence: `test/subscription-parser/LEGACY_BACKUP.md`. Restore/rollback, actual interruption/disk-full, whole-appdata policy и migration gate открыты; флажок не закрыт.
+
 ## 4. Этап 1 — подписки, протоколы и автоправила
 
 ### 4.1. Подписки и хранение

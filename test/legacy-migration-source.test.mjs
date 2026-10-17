@@ -4,7 +4,7 @@ import { linkSync, mkdtempSync, readFileSync, unlinkSync, rmdirSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
-import { acceptedResult, adversarialCases, checkedExecutable, inspectFixture, observationMarker, parseArguments, passMarker } from '../tools/test-legacy-migration.mjs';
+import { acceptedResult, adversarialCases, backupMarker, checkedExecutable, inspectFixture, observationMarker, parseArguments, passMarker } from '../tools/test-legacy-migration.mjs';
 
 const { files, source, entrypoint } = inspectFixture();
 const groups = Object.entries(files).filter(([path]) => /^groups[/][0-9]+[.]json$/.test(path));
@@ -205,4 +205,34 @@ test('rejected profile originals are reserved, not deleted or reused by an empty
   assert.match(edge, /edge-reorder-refusal/);
   assert.match(edge, /edge-collision-overwrite/);
   assert.match(edge, /edge-default-group/);
+});
+
+test('backup mode stays checksum pinned and cannot masquerade as migration acceptance', () => {
+  const runner = resolve('synthetic-runner.exe'), hash = 'a'.repeat(64);
+  assert.deepEqual(parseArguments(['--runner', runner, '--sha256', hash, '--backup']),
+    { executable: runner, sha256: hash, backup: true });
+  for (const args of [['--backup'], ['--inspect', '--backup'],
+    ['--runner', runner, '--sha256', hash, '--backup', '--adversarial']]) assert.throws(() => parseArguments(args));
+  const good = { status: 0, signal: null, stdout: backupMarker + '\n', stderr: '' };
+  assert.equal(acceptedResult(good, false, true), true);
+  assert.equal(acceptedResult(good), false);
+  assert.equal(acceptedResult(good, true, true), false);
+  for (const change of [{ stdout: passMarker }, { stdout: backupMarker + '\n' + backupMarker },
+    { stdout: 'prefix ' + backupMarker }, { status: 1 }, { stderr: 'LEGACY_MIGRATION_FAIL' }]) {
+    assert.equal(acceptedResult({ ...good, ...change }, false, true), false);
+  }
+});
+
+test('backup primitive preserves raw files and publishes manifest only after source recheck', () => {
+  const api = readFileSync(new URL('../db/LegacyBackup.hpp', import.meta.url), 'utf8');
+  assert.match(api, /QIODevice::NewOnly/);
+  assert.match(api, /setDirectWriteFallback\(false\)/);
+  assert.match(api, /after != before/);
+  assert.ok(api.indexOf('after != before') < api.indexOf('QSaveFile marker'));
+  assert.match(api, /stored != manifest\(files\)/);
+  assert.doesNotMatch(api, /QFile::remove|removeRecursively|errorString\(/);
+  const fixture = readFileSync(new URL('./subscription-parser/LegacyBackupFixture.hpp', import.meta.url), 'utf8');
+  for (const code of ['backup-corruption', 'backup-incomplete', 'backup-bad-manifest', 'backup-link-refusal',
+    'backup-read-lock', 'backup-child-negative', 'backup-bytes']) assert.ok(fixture.includes(code));
+  assert.doesNotMatch(fixture, /removeRecursively/);
 });
