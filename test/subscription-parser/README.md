@@ -79,3 +79,9 @@ the isolated parser target; production retains normal peer verification. No real
 panel, profile, system certificate store, proxy, TUN or routes are used. There
 is no automatic scheduler, and this does not imply a successful external VPN
 connection.
+
+**Update MIG-06/R1:** `LEGACY_PERSISTENCE.md` records checked atomic per-file save,
+unchanged cache on failure and explicit error status; bool `Save()` remains a
+change hint, not success. Exact Windows candidate rebuilt, valid-root before/after
+PASS and adversarial suite repeated with `persistence=atomic-v1`. Full migration
+and caller/UI failure propagation remain open; prior hashes above are historical.

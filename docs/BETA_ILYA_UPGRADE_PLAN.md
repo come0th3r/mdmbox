@@ -348,3 +348,5 @@ C++17 / Qt 6 — сервисы приложения и модели Nekobox
 - QWebChannel: `https://doc.qt.io/qt-6/qwebchannel.html` — связь QObject/C++ с HTML/JavaScript.
 
 Первичное исследование выполнено по перечисленным файлам и дизайну. Сборка приложения, runtime-проверка сторонних форков, живой mikan-стенд и релизные испытания на этом шаге **ещё не выполнены** и включены в этапы 0–4.
+
+**Последующий MIG-06/R1 (`dffc6b0`):** checked per-file Save через QSaveFile, без direct-write fallback, полная запись/commit проверены, cache только после success. Bool `Save()` остаётся changed hint; sanitized warning не заменяет caller/UI failure handling. Exact Windows Release build PASS, valid-root до/после PASS, atomic-v1 suite выполнен дважды; immediate retry/no-change readback и callback mutation проверены. Evidence/review — `test/subscription-parser/LEGACY_PERSISTENCE.md`. Non-destructive loader, verified backup/rollback, interruption/disk-full/short-write и multi-store atomic apply остаются открыты; флажок contracts/migration не закрыт.
