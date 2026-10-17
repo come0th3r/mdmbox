@@ -26,6 +26,17 @@
 
 ## Текущий статус
 
+**Documentation follow-up 2026-10-17:** по просьбе UI-разработчика добавлена
+`docs/FUNCTION_CALLS.md`: UI → bridge → backend, параметры, async completion,
+ошибки/побочные эффекты и bounded persistence. `AGENTS.md` требует обновлять
+карту в одном коммите с изменением вызовов; handoff ссылается на неё. База
+этого прохода — shared `beta-ilya` HEAD `d29619d`, index до правок пуст;
+новый код и runtime acceptance этим не добавляются. Сверены все 31 public
+bridge slot, относительные ссылки четырёх документов разрешаются, local source
+tests **36/36 PASS**, `git diff --check` PASS. C++/native/live проверки NOT RUN;
+стенды не запускались. Scope локального коммита через Fork — только AGENTS,
+эта память, UI handoff и карта вызовов; backend/UI работа остаётся приостановлена.
+
 Baseline перед UI-handoff **2026-10-17**: `beta-ilya`, HEAD `8f9c921` (MIG-10 checked callers), ahead11 к GitHub `78196bf`, index пуст; GitHub main `a7a9d13`. Scope/env-ignore `9fccacd`, MIG-09 `8089e4b`, MIG-08 `e11e245`, MIG-07 `f912b31`; локальные commits через **Fork GUI**, index подготовлен точечно Git CLI. По новому указанию отправить эти commits и отдельный WIP source handoff в beta-ilya. C++ runtime evidence остаётся привязанным к MIG-10/R3; новая полная handoff/clean-checkout сборка и visual acceptance NOT RUN. Факт push проверять по remote SHA после операции; этот абзац описывает состояние ДО handoff, не гарантирует отправку. Локальные служебные файлы сохранять вне commit.
 
 Этапы 0–4 не считать целиком закрытыми. Основные компоненты уже существуют, но обязательные protocol, visual, system, packaging и release gates остаются открытыми.

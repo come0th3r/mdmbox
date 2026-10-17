@@ -19,6 +19,11 @@ git switch -c ui-polish
 
 ## Где работать
 
+Карта вызовов: [FUNCTION_CALLS.md](FUNCTION_CALLS.md). При изменении UI-команды,
+bridge slot, payload или backend-цепочки обновлять её **в том же коммите**.
+Указывать параметры, ответы/события, ошибки, побочные эффекты и проверки;
+`accepted` не означает завершение операции. Правило закреплено в `AGENTS.md`.
+
 | Путь | Назначение |
 | --- | --- |
 | `ui/shell/index.html` | Разметка dashboard/servers/settings/logs |
