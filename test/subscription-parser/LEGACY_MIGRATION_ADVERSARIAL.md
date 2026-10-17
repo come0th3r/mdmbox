@@ -8,7 +8,9 @@ production persistence or approve data loss as a migration policy.
 MIG-06/R1 now uses checked atomic per-file persistence and keeps cache unchanged
 on failure; current fixture marker adds `persistence=atomic-v1`. See
 `LEGACY_PERSISTENCE.md` for current implementation, exact new hashes and reruns.
-The legacy malformed/orphan/duplicate load observations below still apply.
+MIG-07/R2 subsequently fixes rejected-profile deletion and reserves skipped IDs;
+see `LEGACY_LOAD_PRESERVATION.md`. Orphan/duplicate hazards remain open. The
+deletion observations below describe the historical MIG-05 snapshot only.
 
 ## Scope and safety
 

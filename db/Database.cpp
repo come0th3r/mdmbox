@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QDir>
 #include <QColor>
+#include <limits>
 
 namespace NekoGui {
 
@@ -37,23 +38,22 @@ namespace NekoGui {
         //
         profiles = {};
         groups = {};
+        skippedProfileCount = 0;
         profilesIdOrder = filterIntJsonFile("profiles");
         groupsIdOrder = filterIntJsonFile("groups");
         // Load Proxys
-        QList<int> delProfile;
         for (auto id: profilesIdOrder) {
             auto ent = LoadProxyEntity(QStringLiteral("profiles/%1.json").arg(id));
             // Corrupted profile?
             if (ent == nullptr || ent->bean == nullptr || ent->bean->version == -114514) {
-                delProfile << id;
+                // Do not delete or repair unreadable/unsupported input. Keep
+                // the filename ID reserved even when no profiles could load.
+                ++skippedProfileCount;
                 continue;
             }
             profiles[id] = ent;
         }
-        // Clear Corrupted profile
-        for (auto id: delProfile) {
-            DeleteProfile(id);
-        }
+        if (skippedProfileCount) qWarning("PROFILE_LOAD_SKIPPED count=%d originals=preserved", skippedProfileCount);
         // Load Groups
         auto loadedOrder = groupsTabOrder;
         groupsTabOrder = {};
@@ -83,6 +83,12 @@ namespace NekoGui {
         }
         //
         if (dataStore->flag_reorder) {
+            // Reorder can reuse a skipped file's ID and destroy its original.
+            // No repair/rewrite is authorized when some input was rejected.
+            if (skippedProfileCount || groups.size() != static_cast<size_t>(groupsIdOrder.size())) {
+                qWarning("PROFILE_REORDER_REFUSED reason=skipped-input");
+                return;
+            }
             {
                 // remove all (contains orphan)
                 for (const auto &profile: profiles) {
@@ -158,7 +164,7 @@ namespace NekoGui {
         if (validType) {
             ent->load_control_must = true;
             ent->fn = jsonPath;
-            ent->Load();
+            if (!ent->Load() || ent->bean->version == -114514) return nullptr;
         }
         return ent;
     }
@@ -251,10 +257,11 @@ namespace NekoGui {
     // Profile
 
     int ProfileManager::NewProfileID() const {
-        if (profiles.empty()) {
+        if (profilesIdOrder.isEmpty()) {
             return 0;
         } else {
-            return profilesIdOrder.last() + 1;
+            const auto last = profilesIdOrder.last();
+            return last == std::numeric_limits<int>::max() ? -1 : qMax(0, last + 1);
         }
     }
 
@@ -263,8 +270,10 @@ namespace NekoGui {
             return false;
         }
 
+        const auto id = NewProfileID();
+        if (id < 0 || QFile::exists(QStringLiteral("profiles/%1.json").arg(id))) return false;
         ent->gid = gid < 0 ? dataStore->current_group : gid;
-        ent->id = NewProfileID();
+        ent->id = id;
         profiles[ent->id] = ent;
         profilesIdOrder.push_back(ent->id);
 
@@ -276,6 +285,8 @@ namespace NekoGui {
     void ProfileManager::DeleteProfile(int id) {
         if (id < 0) return;
         if (dataStore->started_id == id) return;
+        // Missing from the loaded graph can mean a preserved rejected file.
+        if (!profiles.count(id)) return;
         profiles.erase(id);
         profilesIdOrder.removeAll(id);
         QFile(QStringLiteral("profiles/%1.json").arg(id)).remove();
@@ -326,10 +337,11 @@ namespace NekoGui {
     }
 
     int ProfileManager::NewGroupID() const {
-        if (groups.empty()) {
+        if (groupsIdOrder.isEmpty()) {
             return 0;
         } else {
-            return groupsIdOrder.last() + 1;
+            const auto last = groupsIdOrder.last();
+            return last == std::numeric_limits<int>::max() ? -1 : qMax(0, last + 1);
         }
     }
 
@@ -338,7 +350,9 @@ namespace NekoGui {
             return false;
         }
 
-        ent->id = NewGroupID();
+        const auto id = NewGroupID();
+        if (id < 0 || QFile::exists(QStringLiteral("groups/%1.json").arg(id))) return false;
+        ent->id = id;
         groups[ent->id] = ent;
         groupsIdOrder.push_back(ent->id);
         groupsTabOrder.push_back(ent->id);

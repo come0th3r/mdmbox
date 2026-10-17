@@ -24,6 +24,9 @@ namespace NekoGui {
 
         void SaveManager();
 
+        // Rejected profiles stay on disk and their filename IDs remain reserved.
+        [[nodiscard]] int SkippedProfileCount() const { return skippedProfileCount; }
+
         [[nodiscard]] static std::shared_ptr<ProxyEntity> NewProxyEntity(const QString &type);
 
         [[nodiscard]] static std::shared_ptr<Group> NewGroup();
@@ -45,6 +48,7 @@ namespace NekoGui {
         std::shared_ptr<Group> CurrentGroup();
 
     private:
+        int skippedProfileCount = 0;
         // sort by id
         QList<int> profilesIdOrder;
         QList<int> groupsIdOrder;

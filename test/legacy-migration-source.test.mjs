@@ -165,7 +165,7 @@ test('adversarial fixture remains owned, offline and explicitly characterizes di
   assert.match(edge, /args.size\(\) != 7/);
   assert.match(edge, /directory.setAutoRemove\(false\)/);
   assert.match(edge, /!cleanup\(workspace, token, removed\(testCase\)\)/);
-  assert.doesNotMatch(edge, /removeRecursively\(|flag_reorder = true|QDir::setCurrent\(/);
+  assert.doesNotMatch(edge, /removeRecursively\(|QDir::setCurrent\(/);
   assert.match(source, /role != "candidate" \|\| absent != QSet<QString>\{"profiles\/205.json"\}/);
   const main = entrypoint.slice(entrypoint.indexOf('int main('));
   assert.ok(main.indexOf('LegacyMigrationAdversarial::run(app)') < main.indexOf('QApplication app('));
@@ -188,4 +188,21 @@ test('checked save uses atomic commit without destructive fallback or premature 
   const edge = readFileSync(new URL('./subscription-parser/LegacyMigrationAdversarial.hpp', import.meta.url), 'utf8');
   assert.ok(edge.indexOf('edge-retry-immediate') < edge.indexOf('const auto unchanged ='));
   assert.ok(edge.indexOf('edge-nochange-immediate') < edge.indexOf('const bool wrapperChanged ='));
+});
+
+test('rejected profile originals are reserved, not deleted or reused by an empty graph', () => {
+  const db = readFileSync(new URL('../db/Database.cpp', import.meta.url), 'utf8');
+  const loader = db.slice(db.indexOf('void ProfileManager::LoadManager()'), db.indexOf('void ProfileManager::SaveManager()'));
+  assert.doesNotMatch(loader, /DeleteProfile\(/);
+  assert.match(loader, /\+\+skippedProfileCount/);
+  assert.match(loader, /PROFILE_LOAD_SKIPPED count=%d originals=preserved/);
+  assert.match(db, /if \(profilesIdOrder.isEmpty\(\)\)/);
+  assert.match(db, /if \(!profiles.count\(id\)\) return;/);
+  assert.match(db, /std::numeric_limits<int>::max\(\)/);
+  const edge = readFileSync(new URL('./subscription-parser/LegacyMigrationAdversarial.hpp', import.meta.url), 'utf8');
+  assert.match(edge, /edge-skipped-delete/);
+  assert.match(edge, /edge-add-delete-delta/);
+  assert.match(edge, /edge-reorder-refusal/);
+  assert.match(edge, /edge-collision-overwrite/);
+  assert.match(edge, /edge-default-group/);
 });

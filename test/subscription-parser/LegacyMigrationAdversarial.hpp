@@ -10,18 +10,35 @@ using namespace LegacyMigrationFixture;
 
 inline QStringList cases() {
     return {"malformed-profile", "invalid-type", "malformed-group", "orphan-profile",
-            "duplicate-id", "duplicate-order", "write-lock"};
+            "duplicate-id", "duplicate-order", "write-lock", "invalid-bean", "all-invalid-profiles",
+            "max-invalid-profile", "all-invalid-groups"};
 }
 
 inline Manifest corpus(const QString &testCase) {
     auto files = seedFiles();
     auto objects = seedObjects();
     if (!cases().contains(testCase)) return {};
-    if (testCase == "malformed-profile") files["profiles/205.json"] = "{synthetic-broken";
+    if (testCase == "all-invalid-profiles") {
+        for (auto it = files.begin(); it != files.end(); ++it) {
+            if (it.key().startsWith("profiles/")) it.value() = "{synthetic-broken";
+        }
+    }
+    else if (testCase == "all-invalid-groups") {
+        for (auto it = files.begin(); it != files.end(); ++it) {
+            if (QRegularExpression("^groups/[0-9]+[.]json$").match(it.key()).hasMatch()) it.value() = "{synthetic-broken";
+        }
+    }
+    else if (testCase == "max-invalid-profile") files["profiles/402.json"] = "{synthetic-broken";
+    else if (testCase == "malformed-profile") files["profiles/205.json"] = "{synthetic-broken";
     else if (testCase == "malformed-group") files["groups/21.json"] = "{synthetic-broken";
     else {
         auto profile = objects.value("profiles/205.json").toObject();
         if (testCase == "invalid-type") profile["type"] = "synthetic-unknown";
+        if (testCase == "invalid-bean") {
+            auto bean = profile["bean"].toObject();
+            bean["_v"] = -114514;
+            profile["bean"] = bean;
+        }
         if (testCase == "orphan-profile") profile["gid"] = 999;
         if (testCase == "duplicate-id") profile["id"] = 41;
         files["profiles/205.json"] = QJsonDocument(profile).toJson();
@@ -36,7 +53,8 @@ inline Manifest corpus(const QString &testCase) {
 }
 
 inline QSet<QString> removed(const QString &testCase) {
-    if (testCase == "malformed-profile" || testCase == "invalid-type") return {"profiles/205.json"};
+    Q_UNUSED(testCase)
+    // Current loader must preserve the exact complete corpus on disk.
     return {};
 }
 
@@ -66,10 +84,19 @@ inline bool loadSettings() {
 inline bool observedGraph(const QString &testCase) {
     using namespace NekoGui;
     const auto payload = corpus(testCase);
-    const bool deleted = !removed(testCase).isEmpty();
+    const bool allSkipped = testCase == "all-invalid-profiles";
+    const bool maxSkipped = testCase == "max-invalid-profile";
+    const bool deleted = testCase == "malformed-profile" || testCase == "invalid-type" || testCase == "invalid-bean" || maxSkipped;
     const bool badGroup = testCase == "malformed-group";
+    if (testCase == "all-invalid-groups") {
+        const auto group = profileManager->GetGroup(35);
+        return profileManager->SkippedProfileCount() == 0 && profileManager->profiles.size() == 5 &&
+            profileManager->groups.size() == 1 && group && group->id == 35 &&
+            group->fn == "groups/35.json" && profileManager->groupsTabOrder == QList<int>{35};
+    }
     if (dataStore->flag_reorder || dataStore->started_id >= 0 ||
-        profileManager->profiles.size() != (deleted ? 4 : 5) ||
+        profileManager->SkippedProfileCount() != (allSkipped ? 5 : deleted ? 1 : 0) ||
+        profileManager->profiles.size() != (allSkipped ? 0 : deleted ? 4 : 5) ||
         profileManager->groups.size() != (badGroup ? 3 : 4)) return false;
     const QList<int> tabs = badGroup ? QList<int>{12, 7, 34} :
         testCase == "duplicate-order" ? QList<int>{12, 7, 12, 34, 21} : QList<int>{12, 7, 34, 21};
@@ -86,7 +113,8 @@ inline bool observedGraph(const QString &testCase) {
             ordered.append(profile->id);
         }
         QJsonArray expected = QJsonDocument::fromJson(payload.value(group->fn)).object().value("order").toArray();
-        if (deleted && id == 21) expected = {};
+        if (deleted && id == (maxSkipped ? 34 : 21)) expected = {};
+        if (allSkipped) expected = {};
         if (testCase == "duplicate-order" && id == 7) expected = {90, 90, 103};
         if (testCase == "duplicate-id" && id == 21) expected = {41};
         if (ordered != expected) return false;
@@ -166,10 +194,58 @@ inline int child(const QStringList &args) {
     struct Reset { ~Reset() { MW_dialog_message = [](QString, QString) {}; } } reset;
     if (!loadSettings()) return fail("edge-settings");
     NekoGui::profileManager->LoadManager();
+    const auto checkDefault = [&]() {
+        if (testCase != "all-invalid-groups") return true;
+        const auto group = NekoGui::profileManager->GetGroup(35);
+        QByteArray bytes;
+        // Only the exact expected new default may be removed for final manifest
+        // inspection; preserved malformed group originals are never touched.
+        return group && readFile(workspace + "/candidate/groups/35.json", bytes) &&
+            QJsonDocument::fromJson(bytes).object() == group->ToJson() &&
+            QFile::remove(workspace + "/candidate/groups/35.json");
+    };
+    if (!checkDefault()) return fail("edge-default-group");
     Manifest loaded;
     if (dialogs || !snapshot(workspace, "candidate", token, loaded, removed(testCase))) return fail("edge-load-snapshot");
     if (!writeCase) {
+        using namespace NekoGui;
         if (loaded != afterLoad(testCase, token) || !observedGraph(testCase)) return fail("edge-unexpected-behavior");
+        if (profileManager->SkippedProfileCount()) {
+            // A stale delete request must not unlink preserved rejected input.
+            const int rejectedId = testCase == "max-invalid-profile" ? 402 : 205;
+            profileManager->DeleteProfile(rejectedId);
+            Manifest protectedFiles;
+            if (!snapshot(workspace, "candidate", token, protectedFiles) || protectedFiles != before) return fail("edge-skipped-delete");
+            // Both mixed and empty graphs must reserve every filename ID.
+            auto added = profileManager->NewProxyEntity("socks");
+            if (!profileManager->AddProfile(added, 7) || added->id != 403 ||
+                added->fn != "profiles/403.json") return fail("edge-reserved-id");
+            QByteArray newBytes;
+            if (!readFile(workspace + "/candidate/profiles/403.json", newBytes) ||
+                QJsonDocument::fromJson(newBytes).object() != added->ToJson()) return fail("edge-added-readback");
+            profileManager->DeleteProfile(403); // Only this fixture-created loaded entity.
+            if (!snapshot(workspace, "candidate", token, protectedFiles) || protectedFiles != before) return fail("edge-add-delete-delta");
+            if (!observedGraph(testCase) || profileManager->GetProfile(rejectedId)) return fail("edge-skipped-resurrected");
+            // An independently created next-ID file must not be overwritten.
+            const QByteArray sentinel("synthetic-stale-id\n");
+            if (!writeNew(workspace + "/candidate/profiles/403.json", sentinel)) return fail("edge-collision-create");
+            auto collision = profileManager->NewProxyEntity("socks");
+            if (profileManager->AddProfile(collision, 7) || collision->id != -1 || !collision->fn.isEmpty() ||
+                !observedGraph(testCase) || !readFile(workspace + "/candidate/profiles/403.json", newBytes) ||
+                newBytes != sentinel) return fail("edge-collision-overwrite");
+            if (!QFile::remove(workspace + "/candidate/profiles/403.json") ||
+                !snapshot(workspace, "candidate", token, protectedFiles) || protectedFiles != before) return fail("edge-collision-delta");
+        }
+        if (profileManager->SkippedProfileCount() || testCase == "malformed-group" || testCase == "all-invalid-groups") {
+            // Reorder is attempted ONLY with known rejected input: its guard
+            // must return before any destructive rewrite or completion dialog.
+            dataStore->flag_reorder = true;
+            profileManager->LoadManager();
+            dataStore->flag_reorder = false;
+            Manifest guarded;
+            if (!checkDefault() || dialogs || !observedGraph(testCase) ||
+                !snapshot(workspace, "candidate", token, guarded) || guarded != before) return fail("edge-reorder-refusal");
+        }
     } else {
         using namespace NekoGui;
         if (loaded != before) return fail("edge-write-load-mutated");
@@ -313,7 +389,7 @@ inline int run(QCoreApplication &app) {
     if (args.size() > 1 && args[1] == "--legacy-migration-edge-child") return child(args);
     if (args != QStringList{args.first(), "--legacy-migration-adversarial"}) return fail("edge-parent-arguments", 64);
     for (const auto &testCase : cases()) if (runCase(testCase) != 0) return 1;
-    QTextStream(stdout) << "LEGACY_MIGRATION_ADVERSARIAL_OBSERVATIONS_COMPLETE cases=7 children=16 guards=35 persistence=atomic-v1 acceptance=NOT_ACCEPTED\n";
+    QTextStream(stdout) << "LEGACY_MIGRATION_ADVERSARIAL_OBSERVATIONS_COMPLETE cases=11 children=24 guards=55 persistence=atomic-v1 load=preserve-v1 acceptance=NOT_ACCEPTED\n";
     return 0;
 }
 } // namespace LegacyMigrationAdversarial

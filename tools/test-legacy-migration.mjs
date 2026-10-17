@@ -7,9 +7,10 @@ import { fileURLToPath } from 'node:url';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 export const passMarker = 'LEGACY_MIGRATION_VALID_ROOT_REOPEN_PASS children=2 guards=4 seed_files=15';
-export const observationMarker = 'LEGACY_MIGRATION_ADVERSARIAL_OBSERVATIONS_COMPLETE cases=7 children=16 guards=35 persistence=atomic-v1 acceptance=NOT_ACCEPTED';
+export const observationMarker = 'LEGACY_MIGRATION_ADVERSARIAL_OBSERVATIONS_COMPLETE cases=11 children=24 guards=55 persistence=atomic-v1 load=preserve-v1 acceptance=NOT_ACCEPTED';
 export const adversarialCases = ['malformed-profile', 'invalid-type', 'malformed-group', 'orphan-profile',
-  'duplicate-id', 'duplicate-order', 'write-lock'];
+  'duplicate-id', 'duplicate-order', 'write-lock', 'invalid-bean', 'all-invalid-profiles',
+  'max-invalid-profile', 'all-invalid-groups'];
 
 export function inspectFixture() {
   const source = readFileSync(join(repository, 'test/subscription-parser/LegacyMigrationFixture.hpp'), 'utf8');

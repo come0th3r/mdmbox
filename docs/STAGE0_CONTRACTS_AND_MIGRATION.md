@@ -111,6 +111,16 @@ caller-level failure propagation are not implemented; interrupted commit,
 disk-full/short-write and destructive reorder execution are NOT RUN. Original
 MIG-05 observations remain historical regression evidence, not the desired policy.
 
+**Subsequent MIG-07/R2:** ordinary loading no longer deletes rejected profiles;
+filename IDs stay reserved, missing-graph DeleteProfile is a no-op, existing
+destination Add refuses sequential clobber, and reorder refuses rejected input.
+Default group creation still writes a new file when all groups are rejected;
+loader is not globally read-only. Windows exact snapshot built, 11 cases repeated,
+valid-root before/after PASS. Evidence and review limits:
+`test/subscription-parser/LEGACY_LOAD_PRESERVATION.md`. Non-destructive profile-load
+slice is verified; verified backup/rollback, concurrency and caller recovery remain
+open. The preceding MIG-05/MIG-06 results describe their historical snapshots.
+
 ## 2.3 Required legacy-data invariants for acceptance fixtures
 
 Fixtures should cover both data preservation and the existing loader's repair

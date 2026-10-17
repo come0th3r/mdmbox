@@ -3,6 +3,10 @@
 2026-10-17: **per-file save regression verified on Windows**. Full migration,
 cross-store transactions and automatic recovery remain **NOT_ACCEPTED**.
 
+Subsequent MIG-07/R2 preserves rejected profile originals and adds ID/reorder
+guards. Current expanded suite/hash evidence: `LEGACY_LOAD_PRESERVATION.md`.
+The seven-case execution records below remain historical MIG-06/R1 results.
+
 ## Production change and compatibility
 
 `JsonStore::SaveChecked()` returns `{status, changed}`:

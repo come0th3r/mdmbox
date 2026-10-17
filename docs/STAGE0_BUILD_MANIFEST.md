@@ -130,6 +130,13 @@ Current result: **local build BLOCKED; remote valid-root parser target build/run
 
 ## Safe local checks (2026-10-17)
 
+MIG-07/R2: new owned root `C:/Users/build/mdmbox-build/mdm-mig07-m2gnBC-r2`,
+494 hashes unchanged; Release configure/build PASS, valid-root before/after PASS,
+11 preservation/characterization cases repeated (24+55 children each). Remote
+16/16 and local source/probe 30/30 PASS. SDKs reused, no clean-host changes;
+dirty snapshot, not clean checkout. Exact evidence:
+`test/subscription-parser/LEGACY_LOAD_PRESERVATION.md`.
+
 - `node --check ui/shell/app.js` — **PASS** (syntax only).
 - `node --check tools/core-loopback-smoke.mjs` and
   `node --check tools/subscription-probe.mjs` — **PASS** (syntax only; no probes
