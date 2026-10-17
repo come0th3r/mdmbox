@@ -82,7 +82,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         const auto command = managed_request_command;
         managed_request_id.clear();
         managed_request_command.clear();
-        if (command == QStringLiteral("managedReconnect") || command == QStringLiteral("managedRefresh")) return; // Unified completion already delivered.
+        if (command == QStringLiteral("managedReconnect") || command == QStringLiteral("managedRefresh"))
+            return; // Unified completion already delivered.
         emit managedRuntimeEvent({{QStringLiteral("schemaVersion"), 1},
             {QStringLiteral("type"), QStringLiteral("operationFinished")},
             {QStringLiteral("requestId"), requestId},
@@ -109,7 +110,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             {QStringLiteral("requestId"), requestId},
             {QStringLiteral("command"), QStringLiteral("managedReconnect")},
             {QStringLiteral("success"), success}, {QStringLiteral("outcome"), name},
-            {QStringLiteral("error"), error}, {QStringLiteral("runtime"), snapshot}});
+             {QStringLiteral("error"), error}, {QStringLiteral("runtime"), snapshot}});
     });
     connect(managed_session_controller, &NekoGui_sub::ManagedSessionController::refreshCompleted,
             this, [this](const QString &requestId, bool success, int outcome, const QString &,
@@ -726,6 +727,7 @@ QJsonObject MainWindow::managedLoopbackRefreshResult(int groupId, const QString 
     return NekoGui_sub::ManagedCommandContract::result(QStringLiteral("managedRefresh"),
         accepted, error, shellManagedRuntimeState());
 }
+
 bool MainWindow::managedBlocksLegacy() const {
 #ifndef NKR_NO_YAML
     return !NekoGui_sub::ManagedLaunchPolicy::allowLegacyOperation(true,

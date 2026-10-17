@@ -34,8 +34,10 @@ namespace NekoGui_sub {
 
     bool SubscriptionDownloader::fetch(const ManagedSubscriptionRequest &request, const QString &installationId,
                                         SubscriptionDownload &result, QString &error,
-                                        const std::atomic_bool *cancel, int timeoutMs) {
+                                        const std::atomic_bool *cancel, int timeoutMs,
+                                        SubscriptionFetchDiagnostics *diagnostics) {
         error.clear();
+        if (diagnostics) *diagnostics = {};
         const auto &url = request.url;
         bool allowed = url.scheme() == "https";
 #ifdef MDMBOX_DOWNLOADER_LOOPBACK_TEST
@@ -71,6 +73,9 @@ namespace NekoGui_sub {
 #endif
         networkRequest.setSslConfiguration(ssl);
         auto *reply = manager.get(networkRequest);
+        bool tlsError = false;
+        QObject::connect(reply, &QNetworkReply::sslErrors, reply,
+                         [&tlsError](const QList<QSslError> &) { tlsError = true; });
         reply->setReadBufferSize(64 * 1024);
         QEventLoop loop;
         QTimer deadline;
@@ -107,6 +112,12 @@ namespace NekoGui_sub {
         cancellation.stop();
         drain();
         const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (diagnostics) {
+            diagnostics->httpStatus = status;
+            diagnostics->networkError = static_cast<int>(reply->error());
+            diagnostics->responseBytes = bytes.size();
+            diagnostics->tlsError = tlsError;
+        }
         if (error.isEmpty() && status >= 300 && status < 400)
             error = QStringLiteral("Subscription redirect requires explicit approval");
         if (error.isEmpty() && (reply->error() != QNetworkReply::NoError || status != 200))

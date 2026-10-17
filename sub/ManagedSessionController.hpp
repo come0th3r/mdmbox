@@ -12,7 +12,8 @@ namespace NekoGui_sub {
     class ManagedSessionController : public QObject {
         Q_OBJECT
     public:
-        explicit ManagedSessionController(QObject *parent = nullptr);
+        explicit ManagedSessionController(QObject *parent = nullptr,
+                                          ManagedCoreProcess::StopSignal stopSignal = {});
         ~ManagedSessionController() override;
         bool start(const QString &directory, int groupId, const QString &executable,
                    int mixedPort, int apiPort, int timeoutMs);
@@ -43,6 +44,7 @@ namespace NekoGui_sub {
         QThread workerThread;
         QObject *worker;
         ManagedSession *session = nullptr; // Access only on workerThread.
+        ManagedCoreProcess::StopSignal stopSignal; // Optional bounded child-specific adapter.
         QTimer *monitor = nullptr; // Worker-owned.
         bool executing = false; // Worker-only; protects nested readiness loops.
         bool pending = false;

@@ -302,6 +302,9 @@ endif ()
 set_property(TARGET ${NKR_APP_TARGET} PROPERTY AUTOUIC ON)
 set_property(TARGET ${NKR_APP_TARGET} PROPERTY AUTOMOC ON)
 set_property(TARGET ${NKR_APP_TARGET} PROPERTY AUTORCC ON)
+if (${QT_VERSION_MAJOR} GREATER_EQUAL 6)
+    target_sources(${NKR_APP_TARGET} PRIVATE ui/shell/shell.qrc)
+endif ()
 
 set_target_properties(${NKR_APP_TARGET} PROPERTIES
         WIN32_EXECUTABLE TRUE
@@ -315,6 +318,7 @@ if (MDMBOX_SUBSCRIPTION_PARSER_TEST)
              PDB_NAME mdmbox_subscription_parser_test)
     target_compile_definitions(${NKR_APP_TARGET} PRIVATE
             MDMBOX_ISOLATED_APPLICATION_TEST
+            MDMBOX_SUBSCRIPTION_PARSER_TEST
             MDMBOX_TEST_TLS_CA_INJECTION)
     if (NOT NKR_NO_YAML)
         find_package(Qt6 REQUIRED COMPONENTS WebEngineWidgets WebChannel)

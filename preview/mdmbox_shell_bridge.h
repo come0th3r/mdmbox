@@ -23,6 +23,9 @@ public slots:
     QJsonObject managedSnapshot();
     void toggleTun();
     void toggleSystemProxy();
+    void openBasicSettings();
+    void setAutoStart(bool enabled);
+    void setSubscriptionAutoUpdate(bool enabled, int intervalMinutes);
     void importClipboard();
     void openLegacy();
     void selectServer(int id);
@@ -35,9 +38,11 @@ public slots:
     void routingExportConfig();
     void routingResetRules(int tabIndex);
     void clearLogs();
+    void copyLogs();
     void exportLogs();
     void minimizeWindow();
     void maximizeWindow();
+    void startWindowMove();
     void closeWindow();
     void exitProgram();
 

@@ -4,6 +4,7 @@
 #include "sub/GroupUpdater.hpp"
 #include "db/ConfigBuilder.hpp"
 #include "fmt/CustomBean.hpp"
+#include "fmt/TrojanVLESSBean.hpp"
 #include "ExternalProcessFixture.hpp"
 #include "CoreProcessFixture.hpp"
 #include "LegacyMigrationFixture.hpp"
@@ -19,9 +20,12 @@
 #include <QJsonObject>
 #include <QTemporaryDir>
 #include <QTextStream>
+#include <QUrl>
+#include <QUrlQuery>
 #ifndef NKR_NO_YAML
 #include "ManagedRefreshFixture.hpp"
 int runManagedBridgeFixture(QApplication &app);
+int runShellUiFixture(QApplication &app);
 #endif
 
 class WorkingDirectoryGuard {
@@ -64,6 +68,7 @@ int main(int argc, char **argv) {
     QApplication app(argc, argv);
 #ifndef NKR_NO_YAML
     if (app.arguments().contains(QStringLiteral("--managed-bridge-e2e"))) return runManagedBridgeFixture(app);
+    if (app.arguments().contains(QStringLiteral("--shell-ui-only"))) return runShellUiFixture(app);
 #endif
     // Production window installs these callbacks; isolated runner must supply safe sinks.
     MW_show_log = [](QString) {};
@@ -112,6 +117,81 @@ int main(int argc, char **argv) {
         if (!check(!parser.parse_failed && parser.updated_order.size() == 1)) return 4;
         if (!check(parser.updated_order.first()->id < 0)) return 5;
         if (!check(unchanged())) return 6;
+    }
+    {
+        // Exercise the production legacy Clash parser and Nekobox export mapping
+        // with deterministic, synthetic REALITY credentials. This is not a
+        // managed mihomo-full import or runtime protocol acceptance.
+        const QString realityProfile =
+            "proxies:\n"
+            "  - name: synthetic-reality-mapping\n"
+            "    type: vless\n"
+            "    server: 127.0.0.1\n"
+            "    port: 443\n"
+            "    uuid: 11111111-2222-4333-8444-555555555555\n"
+            "    flow: xtls-rprx-vision\n"
+            "    tls: true\n"
+            "    network: tcp\n"
+            "    servername: reality.test\n"
+            "    client-fingerprint: chrome\n"
+            "    reality-opts:\n"
+            "      public-key: CQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"
+            "      short-id: 01020304\n";
+        NekoGui_sub::RawUpdater parser;
+        parser.stage_only = true;
+        parser.gid_add_to = group->id;
+        parser.update(realityProfile);
+        if (!check(!parser.parse_failed && parser.updated_order.size() == 1 && unchanged())) return 21;
+        const auto entity = parser.updated_order.first();
+        const auto bean = entity->TrojanVLESSBean();
+        if (!check(entity->type == "vless" && entity->id < 0 && bean != nullptr &&
+                   bean->proxy_type == NekoGui_fmt::TrojanVLESSBean::proxy_VLESS &&
+                   bean->name == "synthetic-reality-mapping" && bean->serverAddress == "127.0.0.1" &&
+                   bean->serverPort == 443 && bean->password == "11111111-2222-4333-8444-555555555555" &&
+                   bean->flow == "xtls-rprx-vision" && bean->stream->network == "tcp" &&
+                   bean->stream->security == "tls" && bean->stream->sni == "reality.test" &&
+                   bean->stream->utlsFingerprint == "chrome" &&
+                   bean->stream->reality_pbk == "CQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" &&
+                   bean->stream->reality_sid == "01020304" && unchanged())) return 22;
+
+        const auto outbound = bean->BuildCoreObjSingBox().outbound;
+        const auto tls = outbound.value("tls").toObject();
+        const auto reality = tls.value("reality").toObject();
+        const auto utls = tls.value("utls").toObject();
+        if (!check(outbound.value("type").toString() == "vless" &&
+                   outbound.value("server").toString() == "127.0.0.1" &&
+                   outbound.value("server_port").toInt() == 443 &&
+                   outbound.value("uuid").toString() == "11111111-2222-4333-8444-555555555555" &&
+                   outbound.value("flow").toString() == "xtls-rprx-vision" &&
+                   tls.value("enabled").toBool() && tls.value("server_name").toString() == "reality.test" &&
+                   reality.value("enabled").toBool() &&
+                   reality.value("public_key").toString() == "CQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" &&
+                   reality.value("short_id").toString() == "01020304" &&
+                   utls.value("enabled").toBool() && utls.value("fingerprint").toString() == "chrome" &&
+                   unchanged())) return 23;
+
+        const auto shareLink = bean->ToShareLink();
+        QUrl parsedLink(shareLink);
+        QUrlQuery query(parsedLink);
+        if (!check(parsedLink.scheme() == "vless" && parsedLink.host() == "127.0.0.1" &&
+                   parsedLink.port() == 443 && query.queryItemValue("security") == "reality" &&
+                   query.queryItemValue("sni") == "reality.test" && query.queryItemValue("fp") == "chrome" &&
+                   query.queryItemValue("pbk") == "CQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" &&
+                   query.queryItemValue("sid") == "01020304" && query.queryItemValue("type") == "tcp" &&
+                   query.queryItemValue("flow") == "xtls-rprx-vision" &&
+                   query.queryItemValue("encryption") == "none" && unchanged())) return 24;
+        NekoGui_sub::RawUpdater roundTrip;
+        roundTrip.stage_only = true;
+        roundTrip.update(shareLink);
+        const auto roundTripBean = roundTrip.updated_order.isEmpty()
+            ? nullptr : roundTrip.updated_order.first()->TrojanVLESSBean();
+        if (!check(!roundTrip.parse_failed && roundTrip.updated_order.size() == 1 && roundTripBean != nullptr &&
+                   roundTripBean->password == bean->password && roundTripBean->flow == bean->flow &&
+                   roundTripBean->stream->security == "tls" && roundTripBean->stream->sni == bean->stream->sni &&
+                   roundTripBean->stream->utlsFingerprint == bean->stream->utlsFingerprint &&
+                   roundTripBean->stream->reality_pbk == bean->stream->reality_pbk &&
+                   roundTripBean->stream->reality_sid == bean->stream->reality_sid && unchanged())) return 25;
+        QTextStream(stdout) << "LEGACY_CLASH_VLESS_REALITY_BEAN_SINGBOX_EXPORT_SHARELINK_ROUNDTRIP_PASS\n";
     }
     for (const auto &payload : QStringList{"", "<!doctype html><html>error</html>",
                                           "proxies: [", "{broken", "not a subscription"}) {
@@ -196,6 +276,10 @@ int main(int argc, char **argv) {
     if (app.arguments().size() == 3) {
         if (!testManagedHttpsRefresh(app.arguments()[1], app.arguments()[2], group, unchanged)) return 15;
         QTextStream(stdout) << "PRODUCTION_GROUP_HTTPS_REAL_CORE_REFRESH_PASS\n";
+    } else if (app.arguments().size() == 6) {
+        if (!testManagedHttpsRefresh(app.arguments()[1], app.arguments()[2], group, unchanged,
+                                     app.arguments()[3], app.arguments()[4], app.arguments()[5])) return 26;
+        QTextStream(stdout) << "PRODUCTION_GROUP_HTTPS_REALITY_SESSION_E2E_PASS\n";
     }
 #endif
     QTextStream(stdout) << "SUBSCRIPTION_PARSER_STAGING_PASS checks=" << checks << "\n";

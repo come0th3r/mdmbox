@@ -46,7 +46,13 @@ namespace NekoGui_sub {
             if (cancel && cancel->load()) return false;
             const bool accepted = validate(profile, reason);
             if (accepted) validated = profile;
-            return accepted && !(cancel && cancel->load());
+            if (!accepted) return false;
+            if (cancel && cancel->load()) return false;
+            if (download.metadata.expired(QDateTime::currentSecsSinceEpoch()) || download.metadata.exhausted()) {
+                reason = QStringLiteral("Subscription expired or exhausted during validation");
+                return false;
+            }
+            return true;
         };
         if (!store.commit(groupId, download.source, download.metadata, guardedValidator, error)) return false;
         // Return the exact validated commit, never reload a possibly newer envelope.

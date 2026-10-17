@@ -2,13 +2,19 @@
 
 #include "mdmbox_shell_bridge.h"
 #include "db/Database.hpp"
+#include "fmt/QUICBean.hpp"
+#include "fmt/ShadowSocksBean.hpp"
+#include "fmt/SocksHttpBean.hpp"
+#include "fmt/TrojanVLESSBean.hpp"
+#include "fmt/VMessBean.hpp"
 #include "main/NekoGui.hpp"
 #include "ui/mainwindow.h"
+#include "sys/AutoRun.hpp"
 
 #include <QApplication>
 #include <QClipboard>
+#include <QClipboard>
 #include <QComboBox>
-#include <QCoreApplication>
 #include <QDateTime>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -30,16 +36,9 @@
 #include <QWebEnginePage>
 #include <QWebEngineSettings>
 #include <QWebEngineView>
+#include <QWindow>
 
 namespace {
-
-QString pageName(const QString &pageKey) {
-    if (pageKey == QStringLiteral("servers")) return QStringLiteral("mdmbox_2");
-    if (pageKey == QStringLiteral("routing")) return QStringLiteral("mdmbox_1");
-    if (pageKey == QStringLiteral("settings")) return QStringLiteral("mdmbox_4");
-    if (pageKey == QStringLiteral("logs")) return QStringLiteral("mdmbox_5");
-    return QStringLiteral("mdmbox_3");
-}
 
 QString badgeFromName(const QString &name) {
     QString out;
@@ -53,17 +52,6 @@ QString badgeFromName(const QString &name) {
 
 QStringList lines(const QString &text) {
     return text.split(QRegularExpression(QStringLiteral("[\r\n]+")), Qt::SkipEmptyParts);
-}
-
-QString findDesignRootFrom(const QString &startPath) {
-    QDir dir(startPath);
-    while (dir.exists()) {
-        if (dir.exists(QStringLiteral("newdesign"))) {
-            return dir.absoluteFilePath(QStringLiteral("newdesign"));
-        }
-        if (!dir.cdUp()) break;
-    }
-    return {};
 }
 
 struct RoutingRuleEntry {
@@ -121,12 +109,7 @@ int effectiveSelectedId() {
     auto group = NekoGui::profileManager ? NekoGui::profileManager->CurrentGroup() : nullptr;
     if (NekoGui::dataStore->selected_id >= 0) {
         auto selected = NekoGui::profileManager ? NekoGui::profileManager->GetProfile(NekoGui::dataStore->selected_id) : nullptr;
-        if (selected && (!group || selected->gid == group->id)) return NekoGui::dataStore->selected_id;
-    }
-    if (group && !group->order.isEmpty()) return group->order.first();
-    if (group) {
-        auto profiles = group->ProfilesWithOrder();
-        if (!profiles.isEmpty() && profiles.first()) return profiles.first()->id;
+        if (selected && selected->bean && (!group || selected->gid == group->id)) return NekoGui::dataStore->selected_id;
     }
     return -1919;
 }
@@ -178,6 +161,7 @@ QJsonObject buildShellState() {
     state.insert(QStringLiteral("connected"), connected);
     state.insert(QStringLiteral("managedRuntime"), mw ? mw->shellManagedRuntimeState() : QJsonObject{});
     state.insert(QStringLiteral("selectedId"), selectedId);
+    state.insert(QStringLiteral("startedId"), NekoGui::dataStore ? NekoGui::dataStore->started_id : -1919);
     state.insert(QStringLiteral("selectedName"), name);
     state.insert(QStringLiteral("selectedAddress"), address);
     state.insert(QStringLiteral("tunEnabled"), NekoGui::dataStore ? NekoGui::dataStore->spmode_vpn : false);
@@ -193,6 +177,21 @@ QJsonObject buildShellState() {
     state.insert(QStringLiteral("upload"), traffic.value(QStringLiteral("upload")).toString());
     state.insert(QStringLiteral("download"), traffic.value(QStringLiteral("download")).toString());
     state.insert(QStringLiteral("signal"), signal);
+    QJsonObject settings;
+    if (NekoGui::dataStore) {
+        settings.insert(QStringLiteral("theme"), NekoGui::dataStore->theme);
+        settings.insert(QStringLiteral("subscriptionAutoUpdate"), NekoGui::dataStore->sub_auto_update > 0);
+        settings.insert(QStringLiteral("subscriptionUpdateInterval"), qAbs(qint64(NekoGui::dataStore->sub_auto_update)));
+    }
+#ifdef Q_OS_WIN
+    settings.insert(QStringLiteral("autoStart"), AutoRun_IsEnabled());
+    settings.insert(QStringLiteral("autoStartAvailable"), true);
+#else
+    settings.insert(QStringLiteral("autoStart"), false);
+    settings.insert(QStringLiteral("autoStartAvailable"), false);
+#endif
+    state.insert(QStringLiteral("settings"), settings);
+    state.insert(QStringLiteral("applicationVersion"), QString::fromUtf8(NKR_VERSION));
     return state;
 }
 
@@ -248,27 +247,56 @@ QJsonObject buildLogsState() {
 
 QJsonArray buildServerList() {
     QJsonArray servers;
-    auto group = NekoGui::profileManager ? NekoGui::profileManager->CurrentGroup() : nullptr;
-    if (!group) return servers;
+    if (!NekoGui::profileManager) return servers;
 
     const int startedId = NekoGui::dataStore ? NekoGui::dataStore->started_id : -1919;
     const int selectedId = effectiveSelectedId();
 
-    for (const auto &profile : group->ProfilesWithOrder()) {
-        if (!profile || !profile->bean) continue;
+    for (const int gid : NekoGui::profileManager->groupsTabOrder) {
+        const auto group = NekoGui::profileManager->GetGroup(gid);
+        if (!group) continue;
+        for (const auto &profile : group->ProfilesWithOrder()) {
+            if (!profile || !profile->bean) continue;
 
-        QJsonObject item;
-        item.insert(QStringLiteral("id"), profile->id);
-        item.insert(QStringLiteral("name"), profile->bean->DisplayName());
-        item.insert(QStringLiteral("address"), profile->bean->DisplayAddress());
-        item.insert(QStringLiteral("badge"), badgeFromName(profile->bean->DisplayName()));
-        item.insert(QStringLiteral("latency"), profile->latency > 0 ? QString::number(profile->latency) + QStringLiteral(" мс") : QStringLiteral("-"));
-        const QString traffic =
-            profile->traffic_data ? profile->traffic_data->DisplayTraffic().trimmed() : QString();
-        item.insert(QStringLiteral("traffic"), traffic.isEmpty() ? QStringLiteral("-") : traffic);
-        item.insert(QStringLiteral("isRunning"), profile->id == startedId);
-        item.insert(QStringLiteral("isSelected"), profile->id == selectedId);
-        servers.append(item);
+            QJsonObject item;
+            item.insert(QStringLiteral("id"), profile->id);
+            item.insert(QStringLiteral("groupId"), profile->gid);
+            item.insert(QStringLiteral("type"), profile->bean->DisplayType().trimmed().toUpper());
+            if (const auto bean = std::dynamic_pointer_cast<NekoGui_fmt::VMessBean>(profile->bean)) {
+                if (bean->stream) {
+                    item.insert(QStringLiteral("transport"), bean->stream->network);
+                    item.insert(QStringLiteral("security"), bean->stream->security);
+                }
+            } else if (const auto bean = std::dynamic_pointer_cast<NekoGui_fmt::TrojanVLESSBean>(profile->bean)) {
+                if (bean->stream) {
+                    item.insert(QStringLiteral("transport"), bean->stream->network);
+                    item.insert(QStringLiteral("security"), bean->stream->security);
+                }
+            } else if (const auto bean = std::dynamic_pointer_cast<NekoGui_fmt::QUICBean>(profile->bean)) {
+                item.insert(QStringLiteral("transport"), QStringLiteral("udp"));
+                item.insert(QStringLiteral("security"), QStringLiteral("tls"));
+            } else if (const auto bean = std::dynamic_pointer_cast<NekoGui_fmt::ShadowSocksBean>(profile->bean)) {
+                if (bean->stream) {
+                    item.insert(QStringLiteral("transport"), bean->stream->network);
+                    item.insert(QStringLiteral("security"), bean->stream->security);
+                }
+            } else if (const auto bean = std::dynamic_pointer_cast<NekoGui_fmt::SocksHttpBean>(profile->bean)) {
+                if (bean->stream) {
+                    item.insert(QStringLiteral("transport"), bean->stream->network);
+                    item.insert(QStringLiteral("security"), bean->stream->security);
+                }
+            }
+            item.insert(QStringLiteral("name"), profile->bean->DisplayName());
+            item.insert(QStringLiteral("address"), profile->bean->DisplayAddress());
+            item.insert(QStringLiteral("badge"), badgeFromName(profile->bean->DisplayName()));
+            item.insert(QStringLiteral("latency"), profile->latency > 0 ? QString::number(profile->latency) + QStringLiteral(" мс") : QStringLiteral("-"));
+            const QString traffic =
+                profile->traffic_data ? profile->traffic_data->DisplayTraffic().trimmed() : QString();
+            item.insert(QStringLiteral("traffic"), traffic.isEmpty() ? QStringLiteral("-") : traffic);
+            item.insert(QStringLiteral("isRunning"), profile->id == startedId);
+            item.insert(QStringLiteral("isSelected"), profile->id == selectedId);
+            servers.append(item);
+        }
     }
 
     return servers;
@@ -492,11 +520,10 @@ QJsonObject buildRoutingState() {
 
 MdmBoxShellWindow::MdmBoxShellWindow(QWidget *parent, bool loadContent) : QMainWindow(parent) {
     setWindowTitle(QStringLiteral("MDMBOX"));
+    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowSystemMenuHint | Qt::WindowMinimizeButtonHint);
     resize(1440, 920);
 
     view = new QWebEngineView(this);
-    view->settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessFileUrls, true);
-    view->settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, true);
     view->settings()->setAttribute(QWebEngineSettings::JavascriptEnabled, true);
     setCentralWidget(view);
 
@@ -536,53 +563,35 @@ void MdmBoxShellWindow::closeEvent(QCloseEvent *event) {
     event->ignore();
 }
 
-QString MdmBoxShellWindow::designRootPath() const {
-    const QStringList candidates{
-        findDesignRootFrom(QCoreApplication::applicationDirPath()),
-        findDesignRootFrom(QDir::currentPath()),
-        QStringLiteral("C:/Users/0th3r/nekoray/newdesign"),
-    };
-
-    for (const QString &candidate : candidates) {
-        if (!candidate.isEmpty() && QDir(candidate).exists()) return QDir(candidate).absolutePath();
-    }
-    return {};
-}
-
-QString MdmBoxShellWindow::htmlPathForPage(const QString &pageKey) const {
-    const QString root = designRootPath();
-    if (root.isEmpty()) return {};
-    return QDir(root).absoluteFilePath(pageName(pageKey) + QStringLiteral("/code.html"));
-}
-
 QString MdmBoxShellWindow::htmlContentForPage(const QString &pageKey) const {
-    QFile file(htmlPathForPage(pageKey));
+    Q_UNUSED(pageKey);
+    QFile file(QStringLiteral(":/mdmbox-shell/index.html"));
     if (!file.open(QFile::ReadOnly | QFile::Text)) return {};
     QString html = QString::fromUtf8(file.readAll());
-    const QString bootstrap = QStringLiteral(
-        "<style>"
-        "body>header{display:none!important;}"
-        "a,button,[role='button'],select,label,.material-symbols-outlined{-webkit-user-drag:none;user-select:none;}"
-        "button:focus,a:focus,select:focus{outline:none!important;}"
-        "</style>"
-        "<script>window.__mdmboxFreezeRefreshUntil=0;</script>");
+    const QString bootstrap = QStringLiteral("<script>window.__mdmboxFreezeRefreshUntil=0;window.mdmboxBuildVersion='") +
+                              QString::fromUtf8(NKR_VERSION) + QStringLiteral("';</script>");
     html.replace(QStringLiteral("</head>"), bootstrap + QStringLiteral("</head>"));
     return html;
 }
 
 void MdmBoxShellWindow::navigate(const QString &pageKey) {
-    currentPage = pageKey;
-    const QString path = htmlPathForPage(pageKey);
-    if (!QFile::exists(path)) return;
-    const QString html = htmlContentForPage(pageKey);
-    if (html.isEmpty()) {
-        view->setUrl(QUrl::fromLocalFile(path));
+    if (pageKey != QStringLiteral("dashboard") && pageKey != QStringLiteral("servers") &&
+        pageKey != QStringLiteral("settings") && pageKey != QStringLiteral("logs")) {
+        triggerOpenLegacy();
         return;
     }
-    view->setHtml(html, QUrl::fromLocalFile(path));
+    currentPage = pageKey;
+    if (!view->url().toString().startsWith(QStringLiteral("qrc:/mdmbox-shell/index.html"))) {
+        view->setHtml(htmlContentForPage(pageKey), QUrl(QStringLiteral("qrc:/mdmbox-shell/index.html")));
+        return;
+    }
+    const QString pageJson = QString::fromUtf8(QJsonDocument(QJsonArray{pageKey}).toJson(QJsonDocument::Compact));
+    view->page()->runJavaScript(QStringLiteral("window.mdmboxApp&&window.mdmboxApp.navigate(%1[0]);").arg(pageJson));
+    refreshPageState();
 }
 
 void MdmBoxShellWindow::hookPage() {
+    if (view && view->url().scheme() == QStringLiteral("qrc")) return;
     const QString script = QStringLiteral(R"JS(
         (function () {
           if (window.__mdmboxQtHooked) return;
@@ -602,12 +611,12 @@ void MdmBoxShellWindow::hookPage() {
                   stop: function (requestId) {
                     window.mdmboxBridge.managedStop(String(requestId || ""));
                    },
-                   refreshSubscription: function (groupId, requestId) {
-                     window.mdmboxBridge.managedRefresh(groupId, String(requestId || ""));
-                   },
-                   reconnect: function (groupId, requestId) {
-                     window.mdmboxBridge.managedReconnect(groupId, String(requestId || ""));
-                   },
+                    reconnect: function (groupId, requestId) {
+                      window.mdmboxBridge.managedReconnect(groupId, String(requestId || ""));
+                    },
+                    refreshSubscription: function (groupId, requestId) {
+                      window.mdmboxBridge.managedRefresh(groupId, String(requestId || ""));
+                    },
                   refresh: function () {
                     const revision = managedRevision;
                     window.mdmboxBridge.managedSnapshot(function (runtime) {
@@ -759,6 +768,7 @@ QString MdmBoxShellWindow::buildRefreshScript() const {
                "const routing=%3;"
                "const logs=%4;"
                "const page=%5[0];"
+                "if(window.mdmboxApp){window.mdmboxApp.update(state,servers,logs);return;}"
                "%6"
                "%7"
                "%8"
@@ -1612,7 +1622,7 @@ void MdmBoxShellWindow::refreshPageState() {
 
 void MdmBoxShellWindow::triggerConnectToggle() {
     auto *mw = GetMainWindow();
-    if (!mw) return;
+    if (!mw || !NekoGui::dataStore) return;
     if (connectToggleInFlight) return;
     connectToggleInFlight = true;
     QTimer::singleShot(1500, this, [this] { connectToggleInFlight = false; });
@@ -1624,7 +1634,16 @@ void MdmBoxShellWindow::triggerConnectToggle() {
     }
 
     int id = effectiveSelectedId();
-    if (id < 0) return;
+    const auto profile = NekoGui::profileManager ? NekoGui::profileManager->GetProfile(id) : nullptr;
+    if (id < 0 || !profile || !profile->bean) {
+        connectToggleInFlight = false;
+        refreshPageState();
+        return;
+    }
+    if (NekoGui::dataStore->current_group != profile->gid) {
+        NekoGui::dataStore->current_group = profile->gid;
+        mw->show_group(profile->gid);
+    }
     if (NekoGui::dataStore->selected_id != id) {
         NekoGui::dataStore->selected_id = id;
         NekoGui::dataStore->Save();
@@ -1634,7 +1653,7 @@ void MdmBoxShellWindow::triggerConnectToggle() {
 }
 
 bool MdmBoxShellWindow::hasLocalShell() const {
-    return QFile::exists(htmlPathForPage(QStringLiteral("home")));
+    return QFile::exists(QStringLiteral(":/mdmbox-shell/index.html"));
 }
 
 QJsonObject MdmBoxShellWindow::managedLoopbackStartResult(int groupId, const QString &requestId) {
@@ -1669,6 +1688,7 @@ QJsonObject MdmBoxShellWindow::managedLoopbackRefreshResult(int groupId, const Q
             {QStringLiteral("error"), QStringLiteral("Main window is unavailable")},
             {QStringLiteral("runtime"), QJsonObject{}}};
 }
+
 QJsonObject MdmBoxShellWindow::managedLoopbackStopResult(const QString &requestId) {
     if (auto *mw = GetMainWindow()) return mw->managedLoopbackStopResult(requestId);
     return {{QStringLiteral("schemaVersion"), 1},
@@ -1680,7 +1700,8 @@ QJsonObject MdmBoxShellWindow::managedLoopbackStopResult(const QString &requestI
 }
 
 void MdmBoxShellWindow::triggerTunToggle() {
-    if (NekoGui::dataStore && NekoGui::dataStore->vpn_implementation != 1) {
+    if (!NekoGui::dataStore) return;
+    if (NekoGui::dataStore->vpn_implementation != 1) {
         NekoGui::dataStore->vpn_implementation = 1;
         NekoGui::dataStore->Save();
     }
@@ -1695,6 +1716,7 @@ void MdmBoxShellWindow::triggerTunToggle() {
 }
 
 void MdmBoxShellWindow::triggerSystemProxyToggle() {
+    if (!NekoGui::dataStore) return;
     if (NekoGui::dataStore && !NekoGui::dataStore->remember_enable) {
         NekoGui::dataStore->remember_enable = true;
         NekoGui::dataStore->Save();
@@ -1702,6 +1724,36 @@ void MdmBoxShellWindow::triggerSystemProxyToggle() {
     if (auto *mw = GetMainWindow()) {
         mw->neko_set_spmode_system_proxy(!NekoGui::dataStore->spmode_system_proxy);
         refreshPageState();
+    }
+}
+
+void MdmBoxShellWindow::triggerSetAutoStart(bool enabled) {
+    if (!NekoGui::dataStore) return;
+#ifdef Q_OS_WIN
+    AutoRun_SetEnabled(enabled);
+#else
+    Q_UNUSED(enabled);
+#endif
+    refreshPageState();
+}
+
+void MdmBoxShellWindow::triggerSetSubscriptionAutoUpdate(bool enabled, int intervalMinutes) {
+    if (!NekoGui::dataStore || !GetMainWindow()) return;
+    const int interval = qBound(30, intervalMinutes, 24 * 60);
+    NekoGui::dataStore->sub_auto_update = enabled ? interval : -interval;
+    NekoGui::dataStore->Save();
+    TM_auto_update_subsctiption_Reset_Minute(enabled ? interval : 0);
+    refreshPageState();
+}
+
+void MdmBoxShellWindow::triggerOpenBasicSettings() {
+    if (auto *mw = GetMainWindow()) {
+        hide();
+        mw->show_group(NekoGui::dataStore->current_group);
+        mw->show();
+        mw->raise();
+        mw->activateWindow();
+        QTimer::singleShot(0, mw, [mw] { QMetaObject::invokeMethod(mw, "on_menu_basic_settings_triggered", Qt::DirectConnection); });
     }
 }
 
@@ -1716,7 +1768,7 @@ void MdmBoxShellWindow::triggerClipboardImport() {
 void MdmBoxShellWindow::triggerOpenLegacy() {
     hide();
     if (auto *mw = GetMainWindow()) {
-        mw->show_group(NekoGui::dataStore->current_group);
+        if (NekoGui::dataStore) mw->show_group(NekoGui::dataStore->current_group);
         mw->show();
         mw->raise();
         mw->activateWindow();
@@ -1724,7 +1776,13 @@ void MdmBoxShellWindow::triggerOpenLegacy() {
 }
 
 void MdmBoxShellWindow::triggerSelectServer(int id) {
-    if (!NekoGui::dataStore) return;
+    if (!NekoGui::dataStore || !NekoGui::profileManager) return;
+    const auto profile = NekoGui::profileManager ? NekoGui::profileManager->GetProfile(id) : nullptr;
+    if (!profile) return;
+    if (NekoGui::dataStore->current_group != profile->gid) {
+        NekoGui::dataStore->current_group = profile->gid;
+        if (auto *mw = GetMainWindow()) mw->show_group(profile->gid);
+    }
     NekoGui::dataStore->selected_id = id;
     NekoGui::dataStore->Save();
 
@@ -1736,7 +1794,7 @@ void MdmBoxShellWindow::triggerSelectServer(int id) {
 }
 
 void MdmBoxShellWindow::triggerSelectGroup(int gid) {
-    if (!NekoGui::dataStore) return;
+    if (!NekoGui::dataStore || !NekoGui::profileManager || !NekoGui::profileManager->GetGroup(gid)) return;
     NekoGui::dataStore->current_group = gid;
     NekoGui::dataStore->Save();
 
@@ -1946,6 +2004,10 @@ void MdmBoxShellWindow::triggerClearLogs() {
         mw->shellClearLogs();
     }
     refreshPageState();
+}
+
+void MdmBoxShellWindow::triggerCopyLogs() {
+    if (auto *mw = GetMainWindow()) QApplication::clipboard()->setText(mw->shellLogText());
 }
 
 void MdmBoxShellWindow::triggerExportLogs() {

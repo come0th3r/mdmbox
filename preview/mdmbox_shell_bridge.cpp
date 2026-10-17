@@ -3,6 +3,8 @@
 #include "mdmbox_shell_window.h"
 #include "sub/ManagedCommandContract.hpp"
 
+#include <QWindow>
+
 MdmBoxShellBridge::MdmBoxShellBridge(MdmBoxShellWindow *window, QObject *parent)
     : QObject(parent), window(window) {}
 
@@ -59,12 +61,25 @@ void MdmBoxShellBridge::managedRefresh(const QJsonValue &groupId, const QString 
         NekoGui_sub::ManagedCommandContract::result(QStringLiteral("managedRefresh"), false,
             QStringLiteral("Shell is unavailable"), {}));
 }
+
 void MdmBoxShellBridge::toggleTun() {
     if (window) window->triggerTunToggle();
 }
 
 void MdmBoxShellBridge::toggleSystemProxy() {
     if (window) window->triggerSystemProxyToggle();
+}
+
+void MdmBoxShellBridge::openBasicSettings() {
+    if (window) window->triggerOpenBasicSettings();
+}
+
+void MdmBoxShellBridge::setAutoStart(bool enabled) {
+    if (window) window->triggerSetAutoStart(enabled);
+}
+
+void MdmBoxShellBridge::setSubscriptionAutoUpdate(bool enabled, int intervalMinutes) {
+    if (window) window->triggerSetSubscriptionAutoUpdate(enabled, intervalMinutes);
 }
 
 void MdmBoxShellBridge::importClipboard() {
@@ -115,6 +130,10 @@ void MdmBoxShellBridge::clearLogs() {
     if (window) window->triggerClearLogs();
 }
 
+void MdmBoxShellBridge::copyLogs() {
+    if (window) window->triggerCopyLogs();
+}
+
 void MdmBoxShellBridge::exportLogs() {
     if (window) window->triggerExportLogs();
 }
@@ -127,6 +146,10 @@ void MdmBoxShellBridge::maximizeWindow() {
     if (!window) return;
     if (window->isMaximized()) window->showNormal();
     else window->showMaximized();
+}
+
+void MdmBoxShellBridge::startWindowMove() {
+    if (window && window->windowHandle()) window->windowHandle()->startSystemMove();
 }
 
 void MdmBoxShellBridge::closeWindow() {

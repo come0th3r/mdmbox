@@ -95,15 +95,31 @@ Older envelopes without metadata load as unknown metadata.
 
 Tests inject download/validation to verify metadata persistence, expired
 subscription rejection, failed validation, cancellation during validation and
-refresh lock contention without changing the prior envelope. Real core/store
-integration remains separately exercised by the optional binary argument.
+refresh lock contention without changing the prior envelope. A deterministic
+two-thread overlap holds one refresh inside its fetcher and verifies that the
+same-group competitor is rejected before its fetcher runs; the winner's exact
+source+metadata pair is then checked both in the service result and on disk.
+An expiry-boundary fixture lets the subscription expire during validation and
+checks rejection before commit, with the previous envelope and caller's
+committed-output value unchanged. The validator cannot be forcibly interrupted
+mid-call; the guard prevents its stale result from committing when it returns.
+An external writer is also attempted while the service validator holds the
+store's per-envelope lock: the write is refused before its validator runs. Once
+refresh returns, a subsequent store writer can replace that generation with an
+expired/revoked snapshot while the caller still holds the exact earlier
+`CommittedSnapshot`. Marker `SUBSCRIPTION_EXTERNAL_REVOCATION_AFTER_CAPTURE_IS_NOT_LATEST_WINS_PASS`
+documents this current boundary; it is not evidence of a safe revocation policy
+for an active session. No latest-wins lease or cross-writer disk/runtime
+transaction is currently implemented.
+Real core/store integration remains separately exercised by the optional binary
+argument.
 
 This service is not yet bound to the production GroupUpdater. The download
 and validator dependencies must be bound to the genuine adapters, not mock
 callbacks. The currently fixed core version is appropriate only for the pinned
 1.19.32 adapter. Provider provisioning, denial-stub detection, scheduler,
 reconnect and runtime selection are pending. Cancellation after the final
-pre-commit check cannot roll back a completed commit.
+post-validation/pre-commit check cannot roll back a completed commit.
 
 `loadSnapshot` reads and validates source and metadata from one opened envelope;
 both outputs stay unchanged on failure. `load` and `loadMetadata` use that same
@@ -117,7 +133,9 @@ repair is performed. Concurrent Windows replacement/read stress remains pending.
 ## Explicit runtime smoke
 
 Build also produces `mdmbox_managed_runtime_smoke.exe`. Invoke manually with
-the absolute pinned mihomo executable path. Ordinary CTest never starts it.
+the absolute pinned mihomo executable path. Add `--rules-only` to run just the
+synthetic routing-rule/FakeIP policy and pinned-core config-checks before any
+runtime child is started. Ordinary CTest never starts this executable.
 It verifies hash/config, starts a synthetic loopback-only projected profile
 with temporary home and random in-memory API token, waits for authenticated
 version API readiness, checks unauthenticated 401 and mixed TCP listener,
@@ -130,12 +148,122 @@ shutdown proof. Actual proxy data path, production lifecycle integration,
 process-tree cleanup, bind-race resilience and OS snapshot checks are pending.
 Dynamic port reservation is released before start and cannot eliminate races.
 
+An additional Windows runtime scenario marks the live owned managed generation
+`Uncertain` and confirms that both legacy and managed acquisitions remain blocked
+while its real PID is still alive. It then independently opens a kernel process
+handle, terminates that exact child, asks the owning `QProcess` path to observe
+and reap it, verifies both loopback listeners are closed, and checks that
+ownership becomes Free only after confirmed cleanup.
+
+The pinned-core smoke also config-checks a synthetic ordered rule matrix with
+custom `all`/`ru_direct`/`blocked` selectors, DIRECT/REJECT/REJECT-DROP,
+DOMAIN/DOMAIN-SUFFIX/IP-CIDR/SRC-IP-CIDR/DST-PORT/NETWORK rules and
+`no-resolve`. The runtime projection must preserve rule order and group names.
+A separate fake-ip DNS profile checks the current fail-closed boundary:
+structural parsing and self-contained classification preserve it, but runtime
+projection refuses the unreviewed DNS field and leaves the output object
+unchanged. FakeIP execution therefore remains unsupported. These fixtures do
+not establish actual DNS or rule-routing behavior. Provider/geodata references
+remain fail-closed until resource provisioning and offline/cache semantics are
+implemented.
+
+Runtime rule overrides are passed separately from the immutable panel profile.
+Projection concatenates technical rules first, explicit local rules second,
+and then the panel's rules without reordering (including its terminal rule).
+Fixtures verify the projected order, pinned-core config acceptance, preservation
+of the original panel source/rule list, and fail-closed handling of an empty
+override without changing the caller's prior projection. This establishes layer
+ordering and projection only; the new override rules have not yet been exercised
+as live traffic-routing policy.
+
+Provider rejection also has a refresh-level last-known-good fixture: a
+syntactically valid `RULE-SET` profile with a local `rule-providers` section
+passes structural parsing, but the production self-contained-resource validator
+refuses it. The refresh must not overwrite the previous envelope or caller's
+captured-output value. This confirms fail-closed preservation only; file/HTTP
+provider provisioning, cache lifecycle, update failure and offline fallback are
+not implemented or tested.
+
+A separate Windows-only fixture injects refusal of the forced-kill request while
+leaving production `QProcess::waitForFinished(3000)` and the `Uncertain` ownership
+path intact. It holds a kernel handle to that exact child as an external
+supervisor, confirms managed and legacy starts remain blocked after the real wait
+timeout, then terminates the child through the held handle and verifies that the
+owner releases ownership only after its own reap. Marker:
+`MANAGED_FORCE_CLEANUP_TIMEOUT_RETURNS_UNCERTAIN_UNTIL_SUPERVISED_REAP_PASS`.
+The injected forced-kill adapter is fixture-only; production defaults to
+`QProcess::kill()`. This does not emulate kernel failure of `TerminateProcess`
+or prove recovery after parent-process loss.
+
 Runtime smoke now also sends raw absolute-form HTTP through the mixed port
 to a synthetic loopback HTTP origin. Exact response body and one origin request
 are required, with 5-second timeout/8 KiB response bound. Raw TCP avoids client
 automatic localhost proxy bypass. Two Windows runs PASS. This is mixed HTTP →
 DIRECT → local origin, not SOCKS5 outbound/VPN protocol E2E. Graceful shutdown
 still needs forced fallback; no improvement to that gate is claimed.
+
+The runtime fixture now includes a separate pinned-mihomo endpoint transition:
+two local synthetic SOCKS5 upstreams tunnel CONNECT to a loopback HTTP origin.
+The active session first routes one complete HTTP request through endpoint A,
+then `refreshAndReconnect` validates/stores/applies a profile pointing to B.
+A second complete request is required through B; A's count must remain one,
+B's count must be one, and both origin responses must match. Marker:
+`MANAGED_REFRESH_ENDPOINT_A_TO_B_LOOPBACK_DATA_PATH_TRANSITION_PASS`.
+Windows Qt6.7.2/MSVC Release build, CTest 6/6, and full runtime smoke PASS.
+This proves a real local SOCKS5/data-path transition in the pinned core, not a
+public Internet/VPN tunnel, protocol compatibility matrix, live mikan refresh,
+or TUN/system-proxy operation.
+
+The endpoint-transition fixture now uses unauthenticated SOCKS5 for endpoint A
+and a synthetic username/password endpoint B. The local SOCKS5 server validates
+the RFC 1929 auth exchange and counts successful auth separately from CONNECT;
+the post-refresh request must pass authenticated endpoint B. This proves the
+pinned core's SOCKS5 username/password data path with synthetic credentials,
+not interoperability with a real provider or other proxy protocol families.
+The successful marker is
+`MANAGED_SOCKS5_USERNAME_PASSWORD_AUTHENTICATION_PASS`; it was observed in the
+full Windows runtime smoke together with the A→B transition. The harness-only
+first attempt failed its counter because callback captures were incomplete;
+the capture was fixed and the subsequent full smoke passed with no test child
+processes left running.
+
+The runtime harness also exercises SOCKS5 UDP end to end: mihomo receives a UDP
+datagram at its managed loopback mixed listener, performs TCP `UDP ASSOCIATE`
+with a synthetic localhost SOCKS5 endpoint, and relays one framed datagram to a
+localhost UDP origin and its reply back to the client. The endpoint validates
+the exact destination and payload; marker
+`MANAGED_SOCKS5_UDP_LOOPBACK_DATA_PATH_PASS associations=1 datagrams=1`. A full
+Windows pinned-mihomo smoke and managed-profile CTest 6/6 passed. This confirms
+one SOCKS5 UDP relay path in mihomo 1.19.32 with synthetic fixtures only; it is
+not Hysteria2/TUIC/QUIC compatibility, general UDP readiness, public traffic,
+TUN, or system-proxy coverage.
+
+A separate Windows runtime fixture starts a local synthetic HTTP proxy
+(`type: http` outbound). Mihomo establishes a CONNECT tunnel to that proxy; a
+Qt HTTPS client then sends TLS through the managed mixed listener, and the
+fixture forwards the encrypted stream to a loopback TLS origin using a
+synthetic certificate trusted only by that client request. It accepts only the
+expected loopback CONNECT target. Marker
+`MANAGED_HTTP_PROXY_TLS_CONNECT_LOOPBACK_DATA_PATH_PASS`. This checks TLS within
+HTTP CONNECT and the pinned-core HTTP outbound path. It does not test proxy
+authentication, public traffic, panel-provided TLS endpoints, or other protocol
+families. The fixture requires certificate and key file paths as runtime
+arguments; the key is test-only and must not be committed.
+
+The explicit runtime executable also has a `--reality-profile <yaml>` scenario.
+It reads a synthetic full mihomo document through `ManagedProfile::ParseMihomo`,
+applies the reviewed loopback policy, validates it with the pinned core, stores
+it through `ManagedProfileStore`, starts a production `ManagedSession`, and
+checks one HTTP request through VLESS REALITY Vision TCP to a loopback origin.
+The outbound server must be a separately built synthetic sing-box REALITY
+listener, and its UUID/key/short ID must match the supplied profile. The narrow
+runtime policy only admits literal `127.0.0.1`, TCP, `xtls-rprx-vision`, Chrome
+fingerprint, and the reviewed VLESS fields; other VLESS transports/options stay
+fail-closed. The manual Windows run passed through `--reality-profile`, including
+the REALITY Vision data path, and the six registered CTest tests passed
+separately. This validates this specific profile→runtime path, not REALITY UDP,
+`GroupUpdater`/mikan export-refresh mapping or broader protocol compatibility.
+It is opt-in; CTest does not start it.
 
 An isolated Windows protocol experiment additionally exercised VLESS REALITY
 Vision between the pinned mihomo v1.19.32 client and a synthetic local sing-box
@@ -149,6 +277,7 @@ fixture or the production core build. It establishes TCP only: REALITY UDP,
 mikan export/refresh mapping, other REALITY transports, and public endpoints
 remain untested. The ordinary mihomo build remains pinned to its original hash;
 the tagged sing-box binary was temporary test infrastructure only.
+
 ### Windows console shutdown update
 
 The current smoke creates a separate hidden console for its core and invokes
@@ -879,6 +1008,24 @@ its captured one. Concurrent revocation/newer metadata is not observed by this
 attempt. Threaded mutation at the exact commit/apply boundary, combined HTTPS
 apply and controller/UI refresh commands remain NOT RUN. Automatic refresh is
 still disabled.
+
+### Controller StopFailed completion follow-up
+
+The controller now accepts an optional child-specific StopSignal adapter for
+deterministic lifecycle fixtures; default production construction is unchanged.
+A real-mihomo controller fixture refuses graceful signaling, then exercises the
+normal production forced-cleanup path. It verifies exactly one correlated
+reconnect completion with the request ID, `success=false`, `StopFailed`, a
+nonempty error, immutable `failed`/`busy=false` snapshot, unchanged stored
+candidate, PID/group cleared, ports closed and ownership released after confirmed
+reap. `MANAGED_CONTROLLER_STOP_FAILED_CORRELATED_COMPLETION_PASS`.
+
+Fresh Windows MSVC Release fixture build and full real-mihomo runtime smoke PASS.
+This covers a refused signal followed by confirmed kill/reap, NOT an unconfirmed
+OS cleanup timeout: the process does not remain alive for that test. Production
+QWebChannel delivery of `stop-failed`/`restored`/`restore-failed`, and retained
+`Uncertain` ownership after actual kill/reap timeout remain NOT RUN. No automatic
+refresh or VPN data-path readiness is implied.
 
 ## Installation identity
 

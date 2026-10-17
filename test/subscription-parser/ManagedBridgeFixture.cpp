@@ -2,6 +2,7 @@
 #include <windows.h> // Before project enum names and Qt's interface macro.
 #endif
 #include <QApplication>
+#include <QJsonDocument>
 #include <QDir>
 #include <QTemporaryDir>
 #include <QTextStream>
@@ -15,6 +16,7 @@
 #include "sub/ManagedProfileStore.hpp"
 #include "sub/ManagedSessionController.hpp"
 #include "sub/SubscriptionDownloader.hpp"
+#include "sub/GroupUpdater.hpp"
 #include "ManagedRefreshFixture.hpp"
 #include <QWebEngineView>
 #include <QWebEnginePage>
@@ -23,9 +25,135 @@
 #include <QTcpSocket>
 #include <QEventLoop>
 #include <QFile>
+#include <QClipboard>
+#include <QPageLayout>
+#include <QPageSize>
 
 // Production MainWindow/controller + actual shell bridge, isolated cwd and HTML.
 // The test build excludes ONLY automatic legacy core/remembered OS mode startup.
+int runShellUiFixture(QApplication &app) {
+    QTemporaryDir directory;
+    const auto previous = QDir::currentPath();
+    struct RestoreDirectory { QString path; ~RestoreDirectory() { QDir::setCurrent(path); } } restore{previous};
+    if (!directory.isValid() || !QDir::setCurrent(directory.path())) return 130;
+    QDir().mkpath("profiles");
+    QDir().mkpath("groups");
+    NekoGui::dataStore->flag_tray = true;
+    NekoGui::dataStore->remember_enable = false;
+    NekoGui::dataStore->remember_spmode.clear();
+    NekoGui::dataStore->sub_auto_update = 0;
+    MainWindow mainWindow;
+    auto group = NekoGui::profileManager->CurrentGroup();
+    if (!group || !group->ProfilesWithOrder().isEmpty()) return 131;
+    MdmBoxShellWindow shell;
+    auto *view = shell.findChild<QWebEngineView *>();
+    auto *bridge = shell.findChild<MdmBoxShellBridge *>();
+    if (!view || !bridge || !view->page()->profile()->isOffTheRecord()) return 132;
+    auto &page = *view->page();
+    QElapsedTimer timer;
+    auto await = [&](const std::function<bool()> &condition) {
+        timer.restart();
+        while (!condition() && timer.elapsed() < 15000) {
+            QEventLoop pause;
+            QTimer::singleShot(10, &pause, &QEventLoop::quit);
+            pause.exec();
+        }
+        return condition();
+    };
+    QString captureDirectory;
+    const auto arguments = app.arguments();
+    const int fixtureArgument = arguments.indexOf(QStringLiteral("--shell-ui-only"));
+    if (fixtureArgument >= 0 && fixtureArgument + 1 < arguments.size()) {
+        captureDirectory = arguments.at(fixtureArgument + 1);
+        if (!QDir().mkpath(captureDirectory)) return 142;
+    }
+    bool loaded = false, loadedOk = false;
+    QObject::connect(view, &QWebEngineView::loadFinished, &app, [&](bool ok) { loaded = true; loadedOk = ok; });
+    if (!await([&] { return loaded; }) || !loadedOk || !page.url().toString().startsWith("qrc:/mdmbox-shell/index.html")) return 133;
+    bool emptyState = false;
+    page.runJavaScript(QStringLiteral(R"JS((function(){return !document.querySelector('[data-view="dashboard"]').hidden && !document.querySelector('.home-empty-note').hidden && document.querySelector('.power-button').disabled && document.getElementById('app-version').textContent.length>0 && typeof QWebChannel==='function' && typeof qt!=='undefined'})())JS"), [&](const QVariant &v) { emptyState = v.toBool(); });
+    if (!await([&] { return emptyState; })) return 134;
+    page.runJavaScript(QStringLiteral("document.querySelector('[data-page=\"settings\"]').click()"));
+    bool settingsVisible = false;
+    page.runJavaScript(QStringLiteral(R"JS((function(){const p=document.querySelector('[data-view="settings"]'),n=document.querySelectorAll('.nav-item.is-current'),a=document.querySelector('.nav-item[aria-current="page"]');return !!p&&!p.hidden&&n.length===1&&n[0].dataset.page==='settings'&&a===n[0]&&!!document.querySelector('#settings-theme')&&!!document.querySelector('[data-action="basic-settings"]')&&!!document.querySelector('[data-setting="auto-start"]')&&!!document.querySelector('[data-setting="subscription-auto-update"]')&&document.querySelectorAll('.settings-row[aria-disabled="true"]').length>=10})())JS"), [&](const QVariant &v) { settingsVisible = v.toBool(); });
+    if (!await([&] { return settingsVisible; })) return 147;
+    page.runJavaScript(QStringLiteral("document.querySelector('[data-setting=\"subscription-auto-update\"]').click()"));
+    if (!await([&] { return NekoGui::dataStore->sub_auto_update == 120 && TM_auto_update_subsctiption && TM_auto_update_subsctiption->isActive(); })) return 148;
+    page.runJavaScript(QStringLiteral("document.querySelector('[data-interval=\"60\"]').click()"));
+    if (!await([&] { return NekoGui::dataStore->sub_auto_update == 60 && TM_auto_update_subsctiption && TM_auto_update_subsctiption->isActive(); })) return 149;
+    page.runJavaScript(QStringLiteral("document.querySelector('[data-setting=\"subscription-auto-update\"]').click()"));
+    if (!await([&] { return NekoGui::dataStore->sub_auto_update == -60 && TM_auto_update_subsctiption && !TM_auto_update_subsctiption->isActive(); })) return 150;
+    bool emptyServers = false;
+    page.runJavaScript(QStringLiteral(R"JS((function(){document.querySelector('[data-page="servers"]').click();return true})())JS"));
+    page.runJavaScript(QStringLiteral(R"JS((function(){const current=document.querySelectorAll('.nav-item.is-current');const active=document.querySelector('.nav-item[aria-current="page"]');return !document.getElementById('servers-empty').hidden&&!document.querySelector('[data-view="servers"]').hidden&&current.length===1&&current[0].dataset.page==='servers'&&active===current[0]})())JS"), [&](const QVariant &v) { emptyServers = v.toBool(); });
+    if (!await([&] { return emptyServers; })) return 135;
+    auto profile = NekoGui::ProfileManager::NewProxyEntity("socks");
+    profile->bean->name = "Synthetic <node> & test";
+    profile->bean->serverAddress = "127.0.0.1";
+    profile->bean->serverPort = 12345;
+    if (!NekoGui::profileManager->AddProfile(profile, group->id)) return 136;
+    auto secondProfile = NekoGui::ProfileManager::NewProxyEntity("socks");
+    secondProfile->bean->name = "Synthetic selected node";
+    secondProfile->bean->serverAddress = "127.0.0.1";
+    secondProfile->bean->serverPort = 12346;
+    if (!NekoGui::profileManager->AddProfile(secondProfile, group->id)) return 141;
+    NekoGui::dataStore->current_group = group->id;
+    shell.refreshPageState();
+    bool safeRow = false;
+    page.runJavaScript(QStringLiteral(R"JS((function(){const rows=document.querySelectorAll('#server-groups [data-server]'),r=document.querySelector('#server-groups [data-server="%1"]'),n=r&&r.querySelector('.server-name'),b=r&&r.querySelector('.server-mark');return rows.length===2&&!!n&&n.textContent==='Synthetic <node> & test'&&!n.querySelector('*')&&b&&b.textContent==='SYN'&&document.querySelectorAll('#server-groups .server-group').length===1})())JS").arg(profile->id), [&](const QVariant &v) { safeRow = v.toBool(); });
+    if (!await([&] { return safeRow; })) return 137;
+    page.runJavaScript(QStringLiteral("document.querySelector('#server-groups [data-server=\"%1\"]').click()")
+        .arg(secondProfile->id));
+    if (!await([&] { return NekoGui::dataStore->selected_id == secondProfile->id &&
+                            NekoGui::dataStore->current_group == group->id; })) return 138;
+    shell.navigate(QStringLiteral("dashboard"));
+    bool populatedHomeReady = false;
+    page.runJavaScript(QStringLiteral(R"JS((function(){return !document.querySelector('[data-view="dashboard"]').hidden&&document.querySelectorAll('#home-server-rows [data-server]').length===2})())JS"), [&](const QVariant &v) { populatedHomeReady = v.toBool(); });
+    if (!await([&] { return populatedHomeReady; })) return 143;
+    shell.show();
+    app.processEvents();
+    auto capturePdf = [&](const QString &name) {
+        if (captureDirectory.isEmpty()) return true;
+        const auto path = QDir(captureDirectory).filePath(name);
+        bool finished = false;
+        bool ok = false;
+        view->page()->printToPdf([&](const QByteArray &pdf) {
+            QFile output(path);
+            ok = !pdf.isEmpty() && output.open(QIODevice::WriteOnly) && output.write(pdf) == pdf.size();
+            finished = true;
+        }, QPageLayout(QPageSize(QPageSize::A4), QPageLayout::Landscape, QMarginsF(0, 0, 0, 0)));
+        return finished || (await([&] { return finished; })) ? ok : false;
+    };
+    if (!capturePdf(QStringLiteral("dashboard-synthetic.pdf"))) return 144;
+    shell.navigate(QStringLiteral("servers"));
+    bool populatedServersReady = false;
+    page.runJavaScript(QStringLiteral(R"JS((function(){return !document.querySelector('[data-view="servers"]').hidden&&document.querySelectorAll('#server-groups [data-server]').length===2})())JS"), [&](const QVariant &v) { populatedServersReady = v.toBool(); });
+    if (!await([&] { return populatedServersReady; })) return 145;
+    MW_show_log(QStringLiteral("14:02:11.890 INFO [APP] Synthetic <unsafe> & log"));
+    if (!await([&] { return mainWindow.shellLogText().contains(QStringLiteral("Synthetic <unsafe> & log")); })) return 155;
+    shell.navigate(QStringLiteral("logs"));
+    shell.refreshPageState();
+    bool logsReady = false;
+    page.runJavaScript(QStringLiteral(R"JS((function(){const rows=document.querySelectorAll('#logs-output .log-line'),nav=document.querySelectorAll('.nav-item.is-current');return !document.querySelector('[data-view="logs"]').hidden&&rows.length===1&&rows[0].querySelector('.log-time').textContent==='14:02:11.890'&&rows[0].querySelector('.log-level').textContent==='INFO'&&rows[0].querySelector('.log-source').textContent==='[APP]'&&rows[0].querySelector('.log-message').textContent==='Synthetic <unsafe> & log'&&!rows[0].querySelector('.log-message').querySelector('*')&&nav.length===1&&nav[0].dataset.page==='logs'&&document.querySelectorAll('[data-log-action]').length===6})())JS"), [&](const QVariant &v) { logsReady = v.toBool(); });
+    if (!await([&] { return logsReady; })) return 151;
+    page.runJavaScript(QStringLiteral("document.querySelector('[data-log-action=\"pause\"]').click()"));
+    bool pauseReady = false;
+    page.runJavaScript(QStringLiteral("document.querySelector('[data-log-action=\"pause\"]').getAttribute('aria-pressed')==='true'"), [&](const QVariant &v) { pauseReady = v.toBool(); });
+    if (!await([&] { return pauseReady; })) return 152;
+    page.runJavaScript(QStringLiteral("document.querySelector('[data-log-action=\"copy\"]').click()"));
+    if (!await([&] { return QApplication::clipboard()->text().contains(QStringLiteral("Synthetic <unsafe> & log")); })) return 153;
+    page.runJavaScript(QStringLiteral("document.querySelector('[data-log-action=\"clear\"]').click()"));
+    bool cleared = false;
+    if (!await([&] {
+            page.runJavaScript(QStringLiteral(R"JS((function(){return document.querySelectorAll('#logs-output .log-line').length===0&&document.querySelector('#logs-output .logs-empty')!==null})())JS"), [&](const QVariant &v) { cleared = v.toBool(); });
+            return cleared;
+        })) return 154;
+    app.processEvents();
+    if (!capturePdf(QStringLiteral("servers-synthetic.pdf"))) return 146;
+    QTextStream(stdout) << "MDMBOX_REAL_SHELL_QRC_WEBCHANNEL_SETTINGS_AUTO_UPDATE_TIMER_LOGS_RENDER_COPY_CLEAR_PASS\n";
+    return 0;
+}
+
 int runManagedBridgeFixture(QApplication &app) {
     QTemporaryDir directory;
     const auto previous = QDir::currentPath();
@@ -68,7 +196,7 @@ int runManagedBridgeFixture(QApplication &app) {
         ~RestoreFixtureTrust() { NekoGui_sub::SubscriptionDownloader::clearTestCaCertificates(); }
     } restoreTrust;
 
-    MdmBoxShellWindow shell(nullptr, false); // Core E2E uses a controlled synthetic WebEngine page.
+    MdmBoxShellWindow shell(nullptr, false);
     auto *bridge = shell.findChild<MdmBoxShellBridge *>();
     if (!bridge) return 92;
     auto *view = shell.findChild<QWebEngineView *>();
@@ -84,6 +212,8 @@ int runManagedBridgeFixture(QApplication &app) {
     int refreshControllerCompletions = 0;
     bool lastRefreshSuccess = false;
     int lastRefreshOutcome = -1;
+    int injectedFailureEvents = 0;
+    QStringList injectedFailureRequestIds;
     int rejectedReplies = 0, rejectedEvents = 0;
     bool failed = false;
     auto await = [&](const std::function<bool()> &condition) {
@@ -122,9 +252,15 @@ int runManagedBridgeFixture(QApplication &app) {
         else if (id == "js-refresh-duplicate") ++duplicateRefreshCompletions;
         else if (id == "js-reconnect-rejected") ++rejectedEvents;
         else if (id == "js-refreshed") ++refreshEvents;
+        else if (id.startsWith("js-bridge-")) {
+            ++injectedFailureEvents;
+            injectedFailureRequestIds.append(id);
+            if (r.value("accepted").toBool() ||
+                r.value("command").toString() != QStringLiteral("managedStart")) failed = true;
+        }
         else if (id == "js-failed") failed = true;
     });
-    QObject::connect(&page, &QWebEnginePage::renderProcessTerminated, &app,
+        QObject::connect(&page, &QWebEnginePage::renderProcessTerminated, &app,
         [&](QWebEnginePage::RenderProcessTerminationStatus, int) { failed = true; });
     const QString script = QStringLiteral(R"HTML(<!doctype html><script>
         window.addEventListener('mdmbox-managed-snapshot',function(event){
@@ -163,6 +299,18 @@ int runManagedBridgeFixture(QApplication &app) {
               m.start(null,'js-refresh-duplicate');return;
             }
             if(e.type==='reconnectCompleted'){
+              const bridgeFailures={
+                'bridge-stop-failed':{outcome:'stop-failed',success:false,state:'failed',ready:false},
+                'bridge-restored':{outcome:'restored',success:false,state:'ready',ready:true},
+                'bridge-restore-failed':{outcome:'restore-failed',success:false,state:'failed',ready:false}
+              };
+              if(bridgeFailures[e.requestId]){
+                const expected=bridgeFailures[e.requestId];
+                if(e.command!=='managedReconnect'||e.success!==expected.success||e.outcome!==expected.outcome||
+                   !e.error||e.runtime.state!==expected.state||e.runtime.controllerReady!==expected.ready||
+                   e.runtime.vpnConnected!==false){m.start(null,'js-failed');return;}
+                m.start(null,'js-'+e.requestId);return;
+              }
               if(e.requestId==='reconnect-rejected'){
                 if(e.command!=='managedReconnect'||e.success||e.outcome!=='rejected'||!e.error||
                    e.runtime.state!=='ready'||!e.runtime.controllerReady)m.start(null,'js-failed');
@@ -191,7 +339,7 @@ int runManagedBridgeFixture(QApplication &app) {
           clearInterval(boot);window.mdmboxManaged.start(null,'js-loaded');
         },10);
         </script>)HTML");
-    page.setHtml(script, QUrl("qrc:///"));
+    page.setHtml(script, QUrl("https://managed-bridge-fixture.invalid/"));
     if (!await([&] { return loadedPages == 1; })) return 99;
     page.runJavaScript(QString("window.mdmboxManaged.reconnect(%1,'reconnect-inactive');window.mdmboxManaged.reconnect(null,'reconnect-invalid')").arg(group->id));
     if (!await([&] { return refusedReconnectReplies == 2; })) return 106;
@@ -207,7 +355,7 @@ int runManagedBridgeFixture(QApplication &app) {
     if (NekoGui::dataStore->spmode_system_proxy || NekoGui::dataStore->spmode_vpn ||
         !window.managedBlocksLegacy()) return 94;
     // Recreate JS context while the real core remains active. No implicit Start.
-    page.setHtml(script, QUrl("qrc:///"));
+    page.setHtml(script, QUrl("https://managed-bridge-fixture.invalid/"));
     if (!await([&] { return loadedPages == 2 && restoredReady == 2; }) || readyEvents != 1 ||
         !window.shellManagedRuntimeState().value("controllerReady").toBool()) return 100;
     auto *reconnectController = window.findChild<NekoGui_sub::ManagedSessionController *>();
@@ -278,6 +426,40 @@ int runManagedBridgeFixture(QApplication &app) {
             << " sameSnapshot=" << preservedSnapshot << "\n";
         return 120;
     }
+    // Inject controller completion signals through the real MainWindow mapping,
+    // production QWebChannel and JS event handler. Lifecycle truth is covered by
+    // the real-mihomo controller fixture; here test only the bridge contract.
+    const QJsonObject failedSnapshot{{QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("available"), true}, {QStringLiteral("scope"), QStringLiteral("loopback-only")},
+        {QStringLiteral("state"), QStringLiteral("failed")}, {QStringLiteral("busy"), false},
+        {QStringLiteral("groupId"), -1}, {QStringLiteral("controllerReady"), false},
+        {QStringLiteral("vpnConnected"), false}};
+    const QJsonObject restoredSnapshot{{QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("available"), true}, {QStringLiteral("scope"), QStringLiteral("loopback-only")},
+        {QStringLiteral("state"), QStringLiteral("ready")}, {QStringLiteral("busy"), false},
+        {QStringLiteral("groupId"), group->id}, {QStringLiteral("controllerReady"), true},
+        {QStringLiteral("vpnConnected"), false}};
+    const auto stopFailedOutcome = static_cast<int>(NekoGui_sub::ManagedSession::ReconnectOutcome::StopFailed);
+    const auto restoredOutcome = static_cast<int>(NekoGui_sub::ManagedSession::ReconnectOutcome::Restored);
+    const auto restoreFailedOutcome = static_cast<int>(NekoGui_sub::ManagedSession::ReconnectOutcome::RestoreFailed);
+    const auto sendBridgeOutcome = [&](const QString &id, int outcome, const QJsonObject &runtime) {
+        reconnectController->reconnectCompleted(id, false, outcome,
+            QStringLiteral("Synthetic correlated failure for bridge contract test"), runtime);
+        const auto expected = injectedFailureEvents + 1;
+        return await([&] { return injectedFailureEvents == expected; });
+    };
+    if (!sendBridgeOutcome(QStringLiteral("bridge-stop-failed"), stopFailedOutcome, failedSnapshot) ||
+        !sendBridgeOutcome(QStringLiteral("bridge-restore-failed"), restoreFailedOutcome, failedSnapshot) ||
+        !sendBridgeOutcome(QStringLiteral("bridge-restored"), restoredOutcome, restoredSnapshot) ||
+        injectedFailureEvents != 3 || injectedFailureRequestIds != QStringList{
+            QStringLiteral("js-bridge-stop-failed"), QStringLiteral("js-bridge-restore-failed"),
+            QStringLiteral("js-bridge-restored")}) return 121;
+    // Synthetic failure payloads must not leave the page's cached runtime stale.
+    const int snapshotsBeforeResync = restoredReady;
+    page.runJavaScript(QStringLiteral("window.mdmboxManaged.refresh()"));
+    if (!await([&] { return restoredReady == snapshotsBeforeResync + 1; }) ||
+        !window.shellManagedRuntimeState().value("controllerReady").toBool()) return 122;
+    QTextStream(stdout) << "MANAGED_PRODUCTION_WEBCHANNEL_RECONNECT_FAILURE_OUTCOMES_CORRELATED_PASS\n";
 #ifdef Q_OS_WIN
     auto *controller = window.findChild<NekoGui_sub::ManagedSessionController *>();
     if (!controller || controller->processId() <= 0) return 101;

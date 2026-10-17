@@ -1,0 +1,18 @@
+# Disposable localhost-only fixture certificate. Never use for production TLS.
+[req]
+distinguished_name = dn
+x509_extensions = test_ext
+prompt = no
+
+[dn]
+CN = reality.test
+
+[test_ext]
+subjectAltName = @alt_names
+basicConstraints = critical,CA:TRUE
+keyUsage = critical,digitalSignature,keyEncipherment,keyCertSign
+extendedKeyUsage = serverAuth
+
+[alt_names]
+DNS.1 = localhost
+DNS.2 = reality.test

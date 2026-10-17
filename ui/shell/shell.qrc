@@ -1,0 +1,13 @@
+<RCC>
+    <qresource prefix="/mdmbox-shell">
+        <file alias="index.html">index.html</file>
+        <file alias="app.js">app.js</file>
+        <file alias="styles/app.css">styles/app.css</file>
+        <file alias="assets/logs/scroll-top.svg">assets/logs/scroll-top.svg</file>
+        <file alias="assets/logs/scroll-bottom.svg">assets/logs/scroll-bottom.svg</file>
+        <file alias="assets/logs/pause.svg">assets/logs/pause.svg</file>
+        <file alias="assets/logs/copy.svg">assets/logs/copy.svg</file>
+        <file alias="assets/logs/export.svg">assets/logs/export.svg</file>
+        <file alias="assets/logs/clear.svg">assets/logs/clear.svg</file>
+    </qresource>
+</RCC>

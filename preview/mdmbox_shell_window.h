@@ -6,7 +6,6 @@
 
 class QWebChannel;
 class QCloseEvent;
-class QDir;
 class QTimer;
 class QWebEngineView;
 class MdmBoxShellBridge;
@@ -30,6 +29,9 @@ public:
     QJsonObject managedRuntimeSnapshot() const;
     void triggerTunToggle();
     void triggerSystemProxyToggle();
+    void triggerOpenBasicSettings();
+    void triggerSetAutoStart(bool enabled);
+    void triggerSetSubscriptionAutoUpdate(bool enabled, int intervalMinutes);
     void triggerClipboardImport();
     void triggerOpenLegacy();
     void triggerSelectServer(int id);
@@ -42,6 +44,7 @@ public:
     void triggerRoutingExportConfig();
     void triggerRoutingResetRules(int tabIndex);
     void triggerClearLogs();
+    void triggerCopyLogs();
     void triggerExportLogs();
     void triggerExitProgram();
 
@@ -49,8 +52,6 @@ protected:
     void closeEvent(QCloseEvent *event) override;
 
 private:
-    QString designRootPath() const;
-    QString htmlPathForPage(const QString &pageKey) const;
     QString htmlContentForPage(const QString &pageKey) const;
     QString buildChromeNormalizeScript() const;
     QString buildDashboardScript() const;

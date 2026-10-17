@@ -5,6 +5,7 @@
 #include <QTemporaryDir>
 #include <functional>
 #include <memory>
+#include <utility>
 
 namespace NekoGui_sub {
     // Synchronous, single-worker-thread owner; do not reenter during waitReady.
@@ -13,6 +14,9 @@ namespace NekoGui_sub {
     public:
         enum class State { Stopped, Starting, Running, Ready, Stopping, Failed };
         using StopSignal = std::function<bool(qint64)>;
+        using ForceKillSignal = std::function<bool(qint64)>;
+        ManagedCoreProcess(ForceKillSignal forceKillSignal = {})
+            : forceKillSignal(std::move(forceKillSignal)) {}
         ~ManagedCoreProcess();
         bool start(const QString &executable, const ManagedProfile &panel, int mixedPort, int apiPort,
                    const QByteArray &apiToken, QString &error);
@@ -30,6 +34,7 @@ namespace NekoGui_sub {
     private:
         bool ownsRuntime = false;
         quint64 ownershipGeneration = 0;
+        ForceKillSignal forceKillSignal; // Optional bounded adapter; production defaults to QProcess::kill.
         QProcess process;
         std::unique_ptr<QTemporaryDir> home;
         State current = State::Stopped;

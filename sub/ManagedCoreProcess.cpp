@@ -19,7 +19,11 @@ namespace NekoGui_sub {
 
     bool ManagedCoreProcess::forceCleanup() {
         if (process.state() != QProcess::NotRunning) {
-            process.kill();
+            if (forceKillSignal) {
+                try { forceKillSignal(process.processId()); } catch (...) {}
+            } else {
+                process.kill();
+            }
             if (!process.waitForFinished(3000)) {
                 QString ignored;
                 if (ownsRuntime) CoreOwnership::shared().markUncertain(CoreOwnership::Owner::Managed, ignored, ownershipGeneration);

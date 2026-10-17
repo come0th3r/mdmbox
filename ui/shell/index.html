@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>MDMBOX</title>
+  <link rel="stylesheet" href="styles/app.css">
+  <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Основная навигация">
+      <div class="brand">mdmbox</div>
+      <nav class="nav-list">
+        <button class="nav-item is-current" data-page="dashboard" aria-current="page"><svg class="nav-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5 16 5v4.2c0 4-2.5 6.7-6 8.3-3.5-1.6-6-4.3-6-8.3V5z"/></svg>Главная</button>
+        <button class="nav-item" data-page="servers"><svg class="nav-icon" viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3.5" width="14" height="5" rx="1"/><rect x="3" y="11.5" width="14" height="5" rx="1"/><path d="M6 6h.01M6 14h.01"/></svg>Серверы</button>
+        <button class="nav-item" data-page="settings"><svg class="nav-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="m8.3 2.9.4-1h2.6l.4 1 1.3.8 1.1-.2 1.3 2.3-.7.9v1.6l.7.9-1.3 2.3-1.1-.2-1.3.8-.4 1H8.7l-.4-1-1.3-.8-1.1.2-1.3-2.3.7-.9V6.7l-.7-.9 1.3-2.3 1.1.2z"/><circle cx="10" cy="7.5" r="2.1"/></svg>Настройки</button>
+        <button class="nav-item" data-page="logs"><svg class="nav-icon" viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="1.5"/><path d="m6 8 2 2-2 2m4 0h4"/></svg>Логи</button>
+      </nav>
+      <div class="sidebar-version" id="app-version"></div>
+    </aside>
+
+    <main class="main-area">
+      <header class="titlebar" aria-label="Управление окном">
+        <div class="titlebar-drag" aria-hidden="true"></div>
+        <div class="window-actions">
+          <button type="button" aria-label="Свернуть" data-window="minimize">−</button>
+          <button type="button" aria-label="Развернуть" data-window="maximize">□</button>
+          <button type="button" aria-label="Закрыть в трей" data-window="close">×</button>
+        </div>
+      </header>
+
+      <section class="page page-dashboard" data-view="dashboard" aria-labelledby="home-title">
+        <div class="home-statusbar">
+          <div class="mode-switches">
+            <button class="mode-chip" data-toggle="tun" type="button"><span class="mode-dot"></span>TUN <span class="chip-state" data-state="tun"></span></button>
+            <button class="mode-chip" data-toggle="systemProxy" type="button"><span class="mode-dot"></span>Системный прокси <span class="chip-state" data-state="systemProxy"></span></button>
+          </div>
+          <div class="quick-actions">
+            <button type="button" aria-label="Импортировать из буфера обмена" data-action="import"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.5v13M3.5 10h13"/></svg></button>
+            <button type="button" aria-label="Открыть классический интерфейс" data-action="legacy"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="1.5"/><path d="M6 7h8M6 10h8M6 13h5"/></svg></button>
+          </div>
+        </div>
+
+        <div class="home-content">
+          <div class="connection-block">
+            <button class="power-button" type="button" data-action="connect" aria-label="Подключиться">
+              <span class="power-ring" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 5v18M14.5 11.5a18 18 0 1 0 19 0"/></svg></span>
+            </button>
+            <h1 id="home-title" data-field="connection-title">Профиль не выбран</h1>
+            <p class="connection-caption" data-field="connection-caption">Импортируйте профиль, чтобы начать работу.</p>
+            <button class="text-action" type="button" data-action="import">Вставить ссылку из буфера</button>
+          </div>
+
+          <div class="home-empty-note" hidden>
+            <span class="note-mark" aria-hidden="true">i</span>
+            <span>Профилей пока нет. Импортируйте ссылку — она откроется в существующем интерфейсе приложения.</span>
+          </div>
+
+          <section class="home-profiles" aria-labelledby="home-profiles-title">
+            <div class="home-group-heading">
+              <h2 id="home-profiles-title">Профили группы <span class="group-count" data-field="home-profile-count">0</span></h2>
+              <span class="home-group-name" data-field="home-group-name"></span>
+            </div>
+            <div class="server-rows" id="home-server-rows"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="page page-servers" data-view="servers" aria-labelledby="servers-title" hidden>
+        <div class="page-heading">
+          <div><h1 id="servers-title">Серверы</h1><p class="page-subtitle" data-field="servers-summary">Загрузка профилей…</p></div>
+          <div class="heading-actions">
+            <button type="button" class="icon-button" aria-label="Открыть классический интерфейс" data-action="legacy">↗</button>
+            <button type="button" class="primary-button" data-action="import"><span aria-hidden="true">＋</span> Добавить</button>
+          </div>
+        </div>
+
+        <label class="search-box"><span aria-hidden="true" class="search-icon"></span><input type="search" id="server-search" placeholder="Поиск серверов…" autocomplete="off"><kbd>Ctrl K</kbd></label>
+        <div class="filter-list" id="server-filters" aria-label="Фильтр протокола"></div>
+        <div class="group-list" id="server-groups"></div>
+        <div class="empty-state" id="servers-empty" hidden>
+          <div class="empty-symbol" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M10 3.5v13M3.5 10h13"/></svg></div>
+          <h2>Список серверов пока пуст</h2>
+          <p>Добавьте ссылку или импортируйте профиль через существующий сценарий приложения.</p>
+          <button type="button" class="primary-button" data-action="import">Импортировать профиль</button>
+        </div>
+      </section>
+
+      <section class="page page-settings" data-view="settings" aria-labelledby="settings-title" hidden>
+        <div class="settings-content">
+          <header class="settings-heading">
+            <h1 id="settings-title">Настройки</h1>
+            <span class="settings-version" id="settings-version"></span>
+            <p>Параметры оболочки и приложения. Сетевые функции показываются только при наличии подтверждённой поддержки.</p>
+          </header>
+
+          <section class="settings-section" aria-labelledby="settings-appearance-title">
+            <h2 id="settings-appearance-title">Оформление</h2>
+            <div class="settings-panel">
+              <div class="settings-row" aria-disabled="true">
+                <span class="settings-copy"><span class="settings-label">Тема классического интерфейса</span><span class="settings-description">Применяется только к legacy UI; палитра shell не меняется</span></span>
+                <span class="settings-static" id="settings-theme">Системная</span>
+              </div>
+              <div class="settings-row">
+                <span class="settings-copy"><span class="settings-label">Дополнительные параметры</span><span class="settings-description">Открыть полный диалог настроек классического интерфейса</span></span>
+                <button class="settings-open-legacy" type="button" data-action="basic-settings">Открыть настройки <span aria-hidden="true">›</span></button>
+              </div>
+              <div class="settings-row settings-row-stacked" aria-disabled="true">
+                <span class="settings-copy"><span class="settings-label">Стиль карточки подключения</span><span class="settings-description">Компактный вариант ещё не реализован в оболочке</span></span>
+                <div class="settings-choice" aria-label="Доступен только классический стиль"><span class="choice-option is-selected">Классический</span><span class="choice-option is-disabled">Компактный <small>Недоступен</small></span></div>
+              </div>
+              <div class="settings-row" aria-disabled="true">
+                <span class="settings-copy"><span class="settings-label">Язык интерфейса</span><span class="settings-description">Изменение локализации оболочки пока не поддерживается</span></span>
+                <span class="settings-static">Определяется приложением</span>
+              </div>
+              <div class="settings-row" aria-disabled="true">
+                <span class="settings-copy"><span class="settings-label">Масштаб интерфейса</span><span class="settings-description">Используется масштабирование Windows; отдельный shell scale не реализован</span></span>
+                <span class="settings-static">Масштаб Windows</span>
+              </div>
+              <div class="settings-row" aria-disabled="true">
+                <span class="settings-copy"><span class="settings-label">Отключить сглаживание шрифтов</span><span class="settings-description">CSS не может надёжно управлять растеризацией Qt WebEngine</span></span>
+                <span class="settings-switch is-disabled" aria-hidden="true"><span></span></span>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section" aria-labelledby="settings-network-title">
+            <h2 id="settings-network-title">Соединение и туннель</h2>
+            <div class="settings-panel">
+              <div class="settings-row" aria-disabled="true">
+                <span class="settings-copy"><span class="settings-label">Режим туннеля</span><span class="settings-description">Выбор и управление выполняются на главном экране</span></span>
+                <span class="settings-static settings-static-accent">Настраивается отдельно <span aria-hidden="true">›</span></span>
+              </div>
+              <div class="settings-row" aria-disabled="true">
+                <span class="settings-copy"><span class="settings-label">Anti-Censorship / Fragment packets</span><span class="settings-description">Нет подтверждённого packet-level контракта для текущего ядра</span></span>
+                <span class="settings-switch is-disabled" aria-hidden="true"><span></span></span>
+              </div>
+              <div class="settings-row" aria-disabled="true">
+                <span class="settings-copy"><span class="settings-label">Strict Kill Switch</span><span class="settings-description">Fail-closed защита IPv4/IPv6/DNS не реализована и не проверена</span></span>
+                <span class="settings-switch is-disabled" aria-hidden="true"><span></span></span>
+              </div>
+              <div class="settings-row" aria-disabled="true">
+                <span class="settings-copy"><span class="settings-label">Разрешать подключения из LAN</span><span class="settings-description">Изменяет адреса прослушивания и раскрывает локальные порты</span></span>
+                <span class="settings-switch is-disabled" aria-hidden="true"><span></span></span>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section" aria-labelledby="settings-subscriptions-title">
+            <h2 id="settings-subscriptions-title">Подписки</h2>
+            <div class="settings-panel">
+              <div class="settings-row settings-row-subscription">
+                <div class="settings-copy"><label class="settings-label" for="settings-auto-update">Автообновление профилей</label><span class="settings-description">Периодическая проверка подписок без немедленного обновления</span></div>
+                <button class="settings-switch" id="settings-auto-update" type="button" role="switch" aria-checked="false" data-setting="subscription-auto-update" aria-label="Автообновление профилей"><span></span></button>
+                <div class="interval-list" id="settings-update-interval" aria-label="Интервал автообновления">
+                  <button type="button" data-interval="30">30 мин</button><button type="button" data-interval="60">1 час</button><button type="button" data-interval="120">2 часа</button><button type="button" data-interval="360">6 часов</button><button type="button" data-interval="720">12 часов</button><button type="button" data-interval="1440">24 часа</button>
+                </div>
+              </div>
+              <div class="settings-row" aria-disabled="true">
+                <span class="settings-copy"><span class="settings-label">Обновлять при старте</span><span class="settings-description">Принудительное обновление всех групп при запуске не включено в shell</span></span>
+                <span class="settings-switch is-disabled" aria-hidden="true"><span></span></span>
+              </div>
+              <div class="settings-row" aria-disabled="true">
+                <span class="settings-copy"><span class="settings-label">Пинг при запуске</span><span class="settings-description">Автоматический тест всех серверов не выполняется без запроса пользователя</span></span>
+                <span class="settings-switch is-disabled" aria-hidden="true"><span></span></span>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section" aria-labelledby="settings-system-title">
+            <h2 id="settings-system-title">Рабочий стол и система</h2>
+            <div class="settings-panel">
+              <div class="settings-row" aria-disabled="true">
+                <span class="settings-copy"><span class="settings-label">Сворачивать в системный трей</span><span class="settings-description">Закрытие shell скрывает окна; приложение остаётся в трее</span></span>
+                <span class="settings-static">Всегда включено</span>
+              </div>
+              <div class="settings-row" id="settings-auto-start-row">
+                <span class="settings-copy"><span class="settings-label">Автозапуск при входе в систему</span><span class="settings-description">Настройка записи автозапуска приложения в Windows</span></span>
+                <button class="settings-switch" id="settings-auto-start" type="button" role="switch" aria-checked="false" data-setting="auto-start" aria-label="Автозапуск при входе в систему"><span></span></button>
+              </div>
+            </div>
+          </section>
+
+          <div class="settings-footer"><p class="settings-notice" id="settings-notice" role="status" aria-live="polite" hidden></p><button type="button" class="reset-settings" disabled title="Сброс не подключён к контракту настроек">Сбросить настройки</button></div>
+        </div>
+      </section>
+
+      <section class="page page-logs" data-view="logs" aria-labelledby="logs-title" hidden>
+        <div class="logs-content">
+          <header class="logs-heading">
+            <h1 id="logs-title">Логи</h1>
+            <div class="logs-toolbar" role="toolbar" aria-label="Действия с логами">
+              <button class="logs-tool" type="button" data-log-action="top" aria-label="К началу логов" title="К началу"><img src="assets/logs/scroll-top.svg" alt=""></button>
+              <button class="logs-tool" type="button" data-log-action="bottom" aria-label="К последним логам" title="К последним"><img src="assets/logs/scroll-bottom.svg" alt=""></button>
+              <button class="logs-tool" type="button" data-log-action="pause" aria-label="Приостановить автопрокрутку" aria-pressed="false" title="Автопрокрутка"><img src="assets/logs/pause.svg" alt=""></button>
+              <button class="logs-tool" type="button" data-log-action="copy" aria-label="Копировать логи" title="Копировать"><img src="assets/logs/copy.svg" alt=""></button>
+              <button class="logs-tool" type="button" data-log-action="export" aria-label="Экспортировать логи" title="Экспорт"><img src="assets/logs/export.svg" alt=""></button>
+              <button class="logs-tool" type="button" data-log-action="clear" aria-label="Очистить логи" title="Очистить"><img src="assets/logs/clear.svg" alt=""></button>
+            </div>
+          </header>
+          <div class="logs-console" id="logs-console" role="log" aria-live="off" aria-relevant="additions text">
+            <div class="logs-output" id="logs-output"><p class="logs-empty">Логи пока пусты.</p></div>
+          </div>
+          <p class="logs-status" id="logs-status" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

@@ -22,7 +22,8 @@ namespace NekoGui_sub {
                 {QStringLiteral("vpnConnected"), false}};
     }
 
-    ManagedSessionController::ManagedSessionController(QObject *parent) : QObject(parent), worker(new QObject) {
+    ManagedSessionController::ManagedSessionController(QObject *parent, ManagedCoreProcess::StopSignal stopSignal)
+        : QObject(parent), worker(new QObject), stopSignal(std::move(stopSignal)) {
         worker->moveToThread(&workerThread);
         connect(&workerThread, &QThread::finished, worker, &QObject::deleteLater);
         workerThread.start();
@@ -73,7 +74,7 @@ namespace NekoGui_sub {
 
     void ManagedSessionController::ensureSession() {
         if (session) return;
-        session = new ManagedSession;
+        session = stopSignal ? new ManagedSession(stopSignal) : new ManagedSession;
         monitor = new QTimer(worker);
         monitor->setInterval(100);
         connect(monitor, &QTimer::timeout, worker, [this] {

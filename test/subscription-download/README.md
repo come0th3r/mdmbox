@@ -10,10 +10,12 @@ ctest --test-dir <separate-build-dir> --output-on-failure --timeout 30
 
 The local QTcpServer test covers successful body/metadata/HWID delivery,
 redirect rejection, declared oversize, empty body, malformed metadata, HTTP
-403, timeout, pre-cancel and cancellation during a pending request. Failure
-must preserve the previous download result. It uses synthetic ephemeral UUIDs
-which are not printed or persisted. A separate production-mode target verifies
-that plain HTTP loopback is rejected without the test-only compile definition.
+401/403/404/429/500/502/503/504, timeout, pre-cancel and cancellation during a pending
+request. For HTTP failures it asserts the numeric status and nonzero Qt network
+error via the optional content-free diagnostics output. Failure must preserve
+the previous download result. It uses synthetic ephemeral UUIDs which are not
+printed or persisted. A separate production-mode target verifies that plain
+HTTP loopback is rejected without the test-only compile definition.
 
 Production downloader is HTTPS-only, verifies peers, disables automatic
 redirects, caps accumulated body at 4 MiB and reply buffer at 64 KiB, uses a
@@ -22,9 +24,9 @@ response bodies as error text, and explicitly uses NoProxy. Proxy support
 must be supplied later as a deliberate policy; it does not inherit OS proxy
 settings. It is synchronous worker code, not a GUI-thread API.
 
-429/backoff,
-large header limits, explicit proxy policy and cross-origin approval remain
-pending. Size bound applies to body, not all Qt/TLS internal allocations.
+429 retry/backoff policy, large header limits, explicit proxy policy and
+cross-origin approval remain pending. Size bound applies to body, not all
+Qt/TLS internal allocations.
 Production GroupUpdater now binds this component for explicit managed groups;
 successful end-to-end refresh remains pending.
 

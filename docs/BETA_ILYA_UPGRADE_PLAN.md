@@ -1,7 +1,7 @@
 # MDMBOX: план обновления `beta-ilya`
 
 Дата исследования: **14 октября 2026 года**.
-Статус: **план реализации на основе исследования исходников и Figma**.
+Статус: **рабочий план и acceptance checklist**. Первичный текст описывает состояние исследования на 2026-10-14; текущие подтверждённые результаты и ограничения указаны inline в этапах. Незаполненный checkbox означает, что полный критерий приёмки не закрыт, а не обязательно отсутствие реализации.
 Целевая платформа: **Windows 10/11 x64**.
 Рабочая ветка: **`beta-ilya`**. Основная ветка: **`main`**.
 
@@ -17,6 +17,8 @@
 4. **Этап 3 — соединение оболочки с backend и системными функциями.**
 5. **Этап 4 — полные испытания, beta, слияние в `main`, релиз.**
 
+**Уточнение приоритета пользователя:** сначала завершить и принять этапы 0 и 1. UI-реализацию, Figma visual acceptance и polishing отложить до последнего места; до этого выполнять только UI-работы, необходимые для backend-тестирования или устранения блокирующего дефекта. Определение UI/backend контрактов и фиксация manifest на этапе 0 остаются в scope, но не означают реализацию интерфейса.
+
 Создание этого документа не означает завершение реализации или прохождение испытаний приложения. Флажки ниже отмечаются только после выполнения и сохранения доказательств.
 
 ## 1. Что установлено при исследовании
@@ -30,7 +32,7 @@
 | Область | Реальная реализация | Точки изменения |
 | --- | --- | --- |
 | Desktop-приложение | C++17, CMake, Qt Widgets; для Qt 6 подключены WebEngineWidgets и WebChannel | `CMakeLists.txt`, `main/`, `ui/` |
-| Новая оболочка | C++ `QWebEngineView` с HTML/JavaScript и `QWebChannel` | `preview/mdmbox_shell_window.*`, `preview/mdmbox_shell_bridge.*`, `preview/mdmbox_shell_host.*` |
+| Новая оболочка | C++ `QWebEngineView` с HTML/JavaScript и `QWebChannel`; локальный shell подключён в Qt resources | `preview/mdmbox_shell_window.*`, `preview/mdmbox_shell_bridge.*`, `preview/mdmbox_shell_host.*`, `ui/shell/` |
 | Подписки | Собственные C++ парсеры URI, JSON и Clash YAML | `sub/GroupUpdater.*`, `main/HTTPRequestHelper.*`, `fmt/Link2Bean.cpp` |
 | Профили и настройки | Существующее JSON-хранилище Nekobox и модели групп | `db/Group.hpp`, `db/Database.*`, `db/ProxyEntity.hpp` |
 | Генерация конфигурации | Преобразование профилей в конфигурации ядра | `db/ConfigBuilder.cpp`, `fmt/Bean2CoreObj_box.cpp`, `fmt/Bean2External.cpp` |
@@ -40,17 +42,18 @@
 
 MDMBOX — развитие кодовой базы Nekobox, а не приложение, которое должно управлять отдельно установленным Nekobox. Существующие модели, RPC, управление процессами и системным прокси следует переиспользовать.
 
-### 1.2. Найденные препятствия
+### 1.2. Исходные препятствия и их текущая судьба
 
-- `RawUpdater::updateClash()` извлекает прежде всего `proxies`; этого недостаточно для переноса `proxy-groups`, `rules`, `rule-providers` и DNS целого профиля mikan.
-- `GroupUpdater::Update()` обновляет метаданные, а при `sub_clear` удаляет старые профили **до** завершения разбора нового ответа. Требуется транзакционное обновление.
-- В `Group` есть URL, строка `info`, время обновления и порядок профилей; отдельной модели полного управляемого профиля и типизированных метаданных подписки пока нет.
-- Оболочка ищет внешний каталог `newdesign`, включая жёсткий путь `C:/Users/0th3r/nekoray/newdesign`; в исследованной копии этого каталога нет. Интерфейс необходимо включить в репозиторий и установщик.
-- В `mdmbox_shell_window.cpp` много внедряемого JavaScript и обновление страницы таймером 1200 мс. Вместо поиска элементов по тексту нужны стабильные компоненты, идентификаторы и события состояния.
-- `go.mod` ссылается на соседние каталоги `libneko`, `sing-box`, `sing-quic`, `sing`. Их ревизии и получение требуется согласовать с `libs/get_source*.sh`; исходники зависимостей ещё не проверены полностью.
-- `tools/build-local.ps1` содержит пути к Python чужого пользователя, изменяет `go.mod` при сборке и отключает проверки Go-сумм. Эти части следует заменить воспроизводимым bootstrap.
-- Версии Qt в локальном скрипте и CI различаются; CI сохраняет старую матрицу Nekoray. Нельзя принимать утверждение README «latest stable» за доказательство реальной версии встроенного ядра.
-- В `test/` найдены два build-smoke shell-скрипта; полноценную матрицу регрессионных, протокольных и визуальных испытаний ещё предстоит создать.
+Ниже отделены первоначальные наблюдения от текущего состояния: resolved/частичные пункты помечены явно, остальные остаются ограничениями или release checks.
+
+- `RawUpdater::updateClash()` остаётся legacy single-node mapping в Nekobox beans; это не managed `mihomo-full` import/export. Managed path сохраняет full document отдельно.
+- Раннее удаление профилей в legacy `GroupUpdater` остаётся риском legacy links path. Managed `mihomo-full` имеет отдельный validated download/commit path и HTTPS regression fixtures; не переносить на него старое описание как на текущую реализацию.
+- Managed model/store и typed metadata уже существуют, как и поле `subscription_kind`; scheduler, cross-writer latest-wins/revocation contract и полная миграционная приёмка остаются открыты.
+- Shell assets находятся в `ui/shell/` и подключены локальным qrc. Исходное отсутствие `newdesign` — историческое препятствие, устранённое для нового shell; полный installer/offline acceptance ещё нужен.
+- Новый shell использует стабильные DOM IDs и QWebChannel hooks, однако legacy shell bridge сохраняет polling timer 1200 мс и крупные JS hooks; архитектурный cleanup не завершён.
+- Go dependencies/toolchain и source patches уже использовались в pinned Windows builds. Воспроизводимость bootstrap и чистая checkout сборка остаются release checks; `tools/build-local.ps1` всё ещё содержит legacy абсолютные пути и ослабление checksum policy, не использовать его как рекомендуемый bootstrap.
+- При исходном аудите версии Qt в локальном скрипте и CI различались; CI сохранял старую матрицу Nekoray. Перед release повторно проверить конфигурацию CI; README «latest stable» не доказывает версию встроенного ядра.
+- На момент первичного исследования в `test/` были найдены два build-smoke shell-скрипта. Позднее добавлены отдельные regression/runtime fixtures и протокольные localhost slices; полная регрессионная, mikan protocol и визуальная матрицы всё ещё не приняты.
 
 ### 1.3. Контракт mikan
 
@@ -111,18 +114,24 @@ C++17 / Qt 6 — сервисы приложения и модели Nekobox
 - [x] Получены структура страницы Figma `0:1` и design context всех пяти верхнеуровневых экранов.
 - [x] Подтверждены C++/Qt и существующий HTML-мост; необходимость Python не обнаружена.
 
-### Завершить перед реализацией
+### Оставшиеся проверки этапа 0
 
-- [ ] Восстановить зависимости по закреплённым коммитам, изучить RPC и фактически используемые форки sing-box/libneko/sing-quic/sing. Зафиксировать runtime-версии выводом бинарников.
-- [ ] Составить список текущих возможностей: импорт, группы, выбор сервера, TUN, system proxy, DNS, правила, трей, автозапуск, горячие клавиши, миграция, установщик.
-- [ ] Выполнить базовую Release-сборку на чистой Windows VM; отдельно сохранить список исходных дефектов.
-- [ ] Выбрать и закрепить Qt SDK, MSVC, CMake, Ninja, Go, mihomo и Xray, версии npm-инструментов и SHA256 внешних артефактов. Версию не выбирать по надписи из макета.
-- [ ] Устранить абсолютные пользовательские пути и несогласованные Go replacements; восстановить проверку модулей и исключить изменение dependency manifest во время обычной сборки.
-- [ ] Учесть, что исследуемый mikan объявляет `go 1.27`: подтвердить доступность требуемого toolchain для тестового стенда либо использовать закреплённый официальный образ. Не менять его требования наугад.
+Порядок продолжения: сначала инвентаризация фактических возможностей (пункт ниже), затем contracts/migration/capability matrix и clean-checkout build/dependency manifest. Этап 1 выполнять после закрытия этих проверок. Работы этапов 2–3 по UI отложены до завершения этапов 0 и 1, кроме минимально необходимых UI-зависимостей тестирования.
+
+- [ ] Воспроизвести зависимости из pinned revisions, сверить RPC и фактически используемые форки sing-box/libneko/sing-quic/sing из чистого checkout и закрепить runtime-версии. **Частично:** pins и исторические Windows build/runtime checks сведены в `docs/STAGE0_BUILD_MANIFEST.md`; локальный preflight 2026-10-17 BLOCKED (SDK/build tools/sibling Go checkouts отсутствуют в проверенных местах); clean-checkout bootstrap/build не выполнен.
+- [x] Составить список текущих возможностей: импорт, группы, выбор сервера, TUN, system proxy, DNS, правила, трей, автозапуск, горячие клавиши, миграция, установщик. Code inventory и границы evidence зафиксированы в `docs/CURRENT_CAPABILITY_INVENTORY.md`; это не закрывает contracts/migration acceptance и остальные пункты этапа.
+- [ ] Выполнить базовую Release-сборку текущего source на чистой Windows VM; отдельно сохранить исходные дефекты. **Частично:** отдельные alpha startup/shutdown smoke и builds были на VM/build-host, но не являются clean-checkout baseline текущего HEAD.
+- [ ] Закрепить все release toolchain/dependency versions и SHA256 внешних артефактов, включая Xray и UI tooling; провести чистое воспроизведение. **Частично:** подтверждённые pins и известные незакреплённые Xray/geodata/UI/installer inputs перечислены в `docs/STAGE0_BUILD_MANIFEST.md`; полный release manifest и воспроизведение не подтверждены.
+- [ ] Устранить абсолютные пользовательские пути и несогласованные Go replacements; восстановить проверку модулей и исключить изменение dependency manifest во время обычной сборки. **Частично:** добавлен строгий отдельный core build script; legacy `tools/build-local.ps1` ещё содержит персональные пути и ослабленные checksum-настройки.
+- [x] Подтверждён Go 1.27 toolchain на отдельном Windows build-host; это не закрывает clean-build/release reproducibility.
 - [ ] Проверить mikan contract на существующей инфраструктуре в отдельно согласованном объёме. **Изменение требования пользователем, 2026-10-17:** отдельный synthetic mikan-стенд недоступен из-за требований к публичному IP и сертификату; его развёртывание больше не является gate. Локальные synthetic fixtures сохраняются для ошибок и сохранности данных. Live-проверки выполнять только с согласованной учётной записью/подпиской; не менять пользователей, лимиты, HWID-привязки, ноды или настройки панели без отдельного разрешения. Недоступные для безопасного воспроизведения сценарии отмечать NOT RUN/BLOCKED, не PASS. Реальные subscription URLs, токены, HWID, ключи и профили не сохранять в git, fixtures или память.
-- [ ] Зафиксировать контракты backend/UI, схему миграции, capability-матрицу и manifest Figma.
+- [ ] Зафиксировать контракты backend/UI, схему миграции, capability-матрицу и manifest Figma. Evidence draft в `docs/STAGE0_CONTRACTS_AND_MIGRATION.md` уточнён по границам текущих parser tests и риску legacy `flag_reorder` (удаление profile-файлов до перезаписи, без rollback). **Частично, 2026-10-17:** synthetic valid-root save/reopen PASS; MIG-05/R1 characterization семи malformed/orphan/duplicate/write-lock cases выполнен дважды, 16 основных + 35 отказов за прогон, valid-root до/после PASS. Hashes/команды/риски — `test/subscription-parser/LEGACY_MIGRATION_ADVERSARIAL.md`. Подтверждены destructive corrupt-profile cleanup и Save changed=true при отказе write-open; production safety не исправлен, automatic recovery/reorder acceptance не выполнены. Это dirty snapshot, не clean-checkout baseline; контракт не frozen, полный Figma asset manifest открыт.
+
+**Последующий MIG-06/R1 (`dffc6b0`):** checked per-file Save через QSaveFile, без direct-write fallback, полная запись/commit проверены, cache только после success. Bool `Save()` остаётся changed hint; sanitized warning не заменяет caller/UI failure handling. Exact Windows Release build PASS, valid-root до/после PASS, atomic-v1 suite выполнен дважды; immediate retry/no-change readback и callback mutation проверены. Evidence/review — `test/subscription-parser/LEGACY_PERSISTENCE.md`. Non-destructive loader, verified backup/rollback, interruption/disk-full/short-write и multi-store atomic apply остаются открыты; флажок contracts/migration не закрыт.
 
 **Готовность этапа:** чистый checkout собирается по документированной команде; известны исходные дефекты, версии и список поддерживаемых функций.
+
+**MIG-07/R2, 2026-10-17:** rejected profile originals больше не удаляются loader; ID зарезервированы, stale delete не трогает пропущенный профиль, reorder отказывает при rejected input. Windows Release build PASS, valid-root до/после PASS; 11 synthetic cases выполнены дважды, включая all-invalid/max-ID, занятый следующий ID и default35 при повреждении всех групп. Детали: `test/subscription-parser/LEGACY_LOAD_PRESERVATION.md`. Это не verified backup/quarantine/rollback, concurrent no-clobber или завершение migration gate; флажок остаётся открытым.
 
 **MIG-08/R4, 2026-10-17:** отдельный offline Create/Verify backup трёх legacy-каталогов, без перемещения оригиналов и startup integration. Windows Release build и два backup-прогона PASS: ACL listing refusal, partial NewOnly conflict, corruption и4096 long-name files/fresh Verify. Evidence: `test/subscription-parser/LEGACY_BACKUP.md`. Restore/rollback, actual interruption/disk-full, whole-appdata policy и migration gate открыты; флажок не закрыт.
 
@@ -134,8 +143,8 @@ C++17 / Qt 6 — сервисы приложения и модели Nekobox
 
 ### 4.1. Подписки и хранение
 
-- [ ] Выделить сервис подписок из `GroupUpdater`; оставить совместимость с импортом старых ссылок, групп и профилей.
-- [ ] Различать `links`, `singbox-full`, `mihomo-full`, существующие Xray-профили. Сохранять исходный документ, тип, происхождение и нормализованные метаданные.
+- [ ] Выделить сервис подписок из `GroupUpdater`; оставить совместимость с импортом старых ссылок, групп и профилей. **Частично:** `SubscriptionService` и managed production refresh интегрированы; полный legacy refactor/миграция и поведение всех типов не приняты.
+- [ ] Различать `links`, `singbox-full`, `mihomo-full`, существующие Xray-профили. Сохранять исходный документ, тип, происхождение и нормализованные метаданные. **Частично:** managed kind, exact source и metadata envelope присутствуют; singbox-full/Xray provenance и migration acceptance остаются.
 - [ ] Для профиля mikan/mihomo отправлять честный UA с версией приложения и **реального** ядра: `MDMBOX/<app-version> mihomo/<core-version>`, запрос `format=clash`; существующий query сохранять, `format` заменять без дублирования.
 - [ ] Для sing-box режима отдельно формировать UA и тестировать его распознавание в mikan. Не смешивать названия семейств в одном UA: порядок проверок `DetectApp()` влияет на результат.
 - [ ] Парсить трафик как 64-битные байты, expiry как Unix time; отличать неизвестный лимит, безлимит и исчерпанный пакет. Отображать название, срок, дату обновления и ошибки.
@@ -144,7 +153,7 @@ C++17 / Qt 6 — сервисы приложения и модели Nekobox
 - [ ] Обрабатывать недоступность подписки при отсутствии свободных устройств, исчерпании трафика и истечении срока; не импортировать отказ/профиль-заглушку как рабочий сервер и не считать его успешным обновлением с нулём серверов. **Уточнение пользователя, 2026-10-17:** администратор панели предоставил и разрешил клиентские тесты трёх выделенных подписок: активной, просроченной и отозванной администратором; URL с токенами не хранить в git/памяти. Разрешение и логические имена зафиксированы в `PROJECT_MEMORY.md`, live-проверки пока NOT RUN. Для перечисленных ограничений допускается единая пользовательская ошибка «Подписка недоступна. Проверьте срок действия, остаток трафика и лимит устройств в панели» и действие перехода в панель. Отвязку устройств выполняет сам пользователь по ссылке в панели; клиент не реализует управление/отвязку устройств. Отдельные live-сценарии каждой причины не являются gate: проверяются три предоставленных состояния, остальные ветки — локальными fixtures по подтверждённому контракту ответа. Если ответ не различает причины, не приписывать ему конкретную причину. Сетевые/TLS/parse ошибки не являются доказательством ограничения подписки; не смешивать их с подтверждённым отказом доступа.
 - [ ] Цикл обновления: скачать → распознать → разобрать во временную модель → проверить ядром → сохранить snapshot → атомарно применить → подтвердить результат. При ошибке оставить последний рабочий профиль.
 - [ ] Сохранять выбор сервера и пользовательские настройки по стабильной идентичности, а не индексу строки. Проверить переименование, дубли имён, удаление активного сервера и смену порта autotune.
-- [ ] Проверить timeout, redirect, TLS, обрезанный ответ, HTML вместо профиля, пустое тело, HTTP 401/403/404/429/5xx. Не подменять ошибку успешным обновлением с нулём серверов.
+- [x] Проверить timeout, redirect, TLS, обрезанный ответ, HTML вместо профиля, пустое тело и HTTP 401/403/404/429/5xx в synthetic localhost fixtures. Windows Qt6.7.2/MSVC Release: downloader+TLS CTest 3/3 PASS; дополнительно parser HTML/malformed fixtures и managed-profile denial/last-known-good checks PASS в ранее выполненных отдельных тестах. HTTP 401/403/404/429/500/502/503/504 проверяют status/network error и сохранение предыдущего результата; TLS suite проверяет trust/hostname, redirect, truncation и chunked oversize. Это не mikan contract/live-panel и не проверка retry/backoff policy. Не подменять ошибку успешным обновлением с нулём серверов.
 
 ### 4.2. Исполнение протоколов
 
@@ -152,7 +161,7 @@ C++17 / Qt 6 — сервисы приложения и модели Nekobox
 
 | Пресет/протокол mikan | Плановый путь полного покрытия | Обязательная проверка |
 | --- | --- | --- |
-| VLESS REALITY Vision | mihomo | UUID, SNI, public key, short ID, flow, TCP/UDP. **Частично:** synthetic loopback TCP полный REALITY handshake + Vision и HTTP data path PASS на pinned mihomo v1.19.32; UDP не проверен. Это отдельный ad hoc fixture, не production build и не вся mikan matrix. |
+| VLESS REALITY Vision | mihomo | UUID, SNI, public key, short ID, flow, TCP/UDP. **Частично:** ad hoc synthetic loopback TCP полный REALITY handshake + Vision и HTTP data path PASS на pinned mihomo v1.19.32. Отдельно synthetic full mihomo document прошёл `ManagedProfile::ParseMihomo` → узкую loopback policy → pinned-core config-check → `ManagedProfileStore`/production `ManagedSession` и HTTP round-trip до localhost origin через REALITY Vision TCP. Также combined localhost fixture дважды прошёл, включая повтор с repository-tracked generator: production `GroupUpdater::Update` refresh → exact managed envelope → production `ManagedSession` → REALITY Vision TCP handshake и HTTP round-trip к synthetic origin (`requests=1`). В повторе generator и cert создавались во внешнем временном каталоге, проверялись pinned sing-box/mihomo configs, а scratch overlay восстановлен по SHA256; процессы и fixture удалены. Refresh сохранил полный source и proxy/group/rule indexes без flattening. Legacy Clash YAML `RawUpdater::updateClash` → Nekobox bean → sing-box outbound/share-link round-trip проверен отдельно. Mihomo YAML export отсутствует; UDP и остальные комбинации не проверены. |
 | VLESS REALITY XHTTP | mihomo; сохранить существующий Xray-путь | XHTTP options, mode, host/path, REALITY |
 | VLESS REALITY gRPC | mihomo | service name, TLS/REALITY параметры |
 | VLESS PQ / Encryption | mihomo | сохранение encryption без упрощения до `none` |
@@ -170,21 +179,21 @@ C++17 / Qt 6 — сервисы приложения и модели Nekobox
 | Snell | mihomo | версия, PSK, транспорт |
 | VMess, пользовательский конфиг | mihomo | UUID и реально экспортируемые transport-параметры |
 
-- [ ] Создать `CoreAdapter`/`CoreManager`: старт, stop, config-check, состояние, логи, statistics, proxy selection и graceful shutdown. Существующие адаптеры оборачивают текущий код.
-- [ ] Первым кандидатом для mikan взять mihomo **1.19.32**, совпадающий с исследованной панелью; подтвердить Windows-артефакт, checksum и все пресеты перед закреплением.
-- [ ] Получать capability-статус из версии/фактических тестов ядра. Не считать успешный parsing подтверждением поддержки протокола.
+- [ ] Создать `CoreAdapter`/`CoreManager`: старт, stop, config-check, состояние, логи, statistics, proxy selection и graceful shutdown. Существующие адаптеры оборачивают текущий код. **Частично:** managed runtime/session/controller и process ownership существуют; единый adapter contract и полный lifecycle acceptance не завершены.
+- [x] Закрепить mihomo **1.19.32** как baseline runtime для текущих synthetic managed-profile проверок; Windows-артефакт/hash проверены на build-host. Это не означает, что все protocol presets приняты или что release artifact уже воспроизводим из clean checkout.
+- [ ] Получать capability-статус из версии/фактических тестов ядра. Не считать успешный parsing подтверждением поддержки протокола. **Частично:** VLESS REALITY Vision подтвердил полный synthetic loopback TCP handshake и HTTP data path на pinned mihomo v1.19.32; отдельный production `ManagedSession` с synthetic full mihomo profile также прошёл handshake/data path до localhost origin. Кроме того, combined localhost E2E прошёл production `GroupUpdater::Update` HTTPS refresh → exact managed envelope → production `ManagedSession` → REALITY handshake/HTTP data path к loopback origin; refresh/config-check/index preservation и runtime применены к одному и тому же сохранённому full document. Это не mihomo YAML export. Legacy `RawUpdater::updateClash` mapping в Nekobox bean и production sing-box outbound/share-link serialization round-trip проверены отдельно. Также проверены SOCKS5 CONNECT A→B с RFC 1929 username/password, SOCKS5 UDP ASSOCIATE relay с одним synthetic localhost datagram round-trip и `type: http` outbound через CONNECT к синтетическому loopback proxy; HTTPS-клиент проходит с TLS внутри CONNECT до synthetic loopback TLS origin. REALITY UDP, остальные перечисленные mikan пресеты, HTTP proxy auth, Hysteria2/TUIC и публичные подключения не покрыты.
 - [ ] Покрыть дополнительные транспортные поля из пользовательских конфигов, например WS; не ограничивать совместимость лишь названием пресета.
 - [ ] Если ядро не принимает выданную возможность, показывать точную причину и сохранять исходный профиль. Не отбрасывать её молча и не объявлять полную совместимость.
 - [ ] Обновлять sing-box отдельно от UI; проверить миграции DNS, route actions, legacy geoip/geosite и rule-set. Полный sing-box export mikan подключать только после проверки соответствующей схемы.
 
 ### 4.3. Правила панели и маршрутизация
 
-- [ ] Для mihomo сохранять полный документ: `proxies`, `proxy-groups`, `rules`, `rule-providers`, `dns`, режимы и связанные настройки. Не flatten-ить группы в список одиночных прокси.
-- [ ] Разделить неизменённый профиль панели, пользовательские overrides и локальные runtime-параметры: порты, TUN, путь к cache, API secret. Хранить происхождение каждого слоя.
-- [ ] Порядок приоритета закрепить тестами: обязательные технические правила от петли → явные local overrides → правила панели в исходном порядке → её terminal/default policy. Не сортировать правила.
-- [ ] Проверить `all`, `ru_direct`, `blocked`, DIRECT/REJECT/REJECT-DROP, пользовательские target-группы, process/domain/IP/port/network правила, DNS/FakeIP и `no-resolve`.
+- [ ] Для mihomo сохранять полный документ: `proxies`, `proxy-groups`, `rules`, `rule-providers`, `dns`, режимы и связанные настройки. Не flatten-ить группы в список одиночных прокси. **Частично:** полный source/envelope и proxy/group/rule indexes проходят synthetic production refresh→session fixture без flattening; полный round-trip каждой секции включая providers, DNS и режимы ещё не принят.
+- [ ] Разделить неизменённый профиль панели, пользовательские overrides и локальные runtime-параметры: порты, TUN, путь к cache, API secret. Хранить происхождение каждого слоя. **Частично:** runtime policy принимает отдельные technical/local rule lists и строит detached projection, не меняя panel source; provenance для persistence/UI и остальные local runtime settings как самостоятельный слой не завершены.
+- [ ] Порядок приоритета закрепить тестами: обязательные технические правила от петли → явные local overrides → правила панели в исходном порядке → её terminal/default policy. Не сортировать правила. **Частично:** synthetic fixture подтверждает именно этот порядок, сохранение terminal MATCH и panel source/rules, отказ пустого override без изменения прежнего результата; pinned mihomo принимает projected config. Фактический трафик по вставленным override rules ещё не проверен.
+- [ ] Проверить `all`, `ru_direct`, `blocked`, DIRECT/REJECT/REJECT-DROP, пользовательские target-группы, process/domain/IP/port/network правила, DNS/FakeIP и `no-resolve`. **Частично:** synthetic pinned-mihomo config-check подтверждает ordered DOMAIN/DOMAIN-SUFFIX/IP-CIDR/SRC-IP-CIDR/DST-PORT/NETWORK + no-resolve, custom all/ru_direct/blocked targets, DIRECT/REJECT/REJECT-DROP. Отдельный A→B runtime fixture использует custom group и no-resolve для loopback endpoint. FakeIP execution не реализована: fixture подтверждает fail-closed refusal без изменения projected output. Не проверялись traffic-routing semantics, process rules, реальные DNS и providers.
 - [ ] Не переносить списки `rules` в старые списки direct/proxy/block, теряя порядок. На первом шаге отображать managed-правила с указанием источника, редактирование делать через overrides.
-- [ ] Проверить загрузку и обновление `rule-providers`, YAML/text/MRS где применимо, cache и поведение offline. Сохранить последний валидный набор при сбое.
+- [ ] Проверить загрузку и обновление `rule-providers`, YAML/text/MRS где применимо, cache и поведение offline. Сохранить последний валидный набор при сбое. **Частично:** synthetic `RULE-SET` + `rule-providers` проходит structural parse, затем resource policy fail-closed отклоняет refresh без замены last-known-good envelope/captured output. Provider provisioning, YAML/text/MRS parsing, cache lifecycle, updates и offline fallback не реализованы/NOT RUN.
 - [ ] При недоступном обязательном списке не включать незаметный обход через DIRECT; использовать последнее рабочее состояние либо сообщать о невозможности безопасного запуска.
 - [ ] Смена active subscription переключает согласованный набор серверов, правил, DNS и групп, а не только список узлов.
 - [ ] Серверный autotune: стенд меняет порт/SNI → subscription refresh → проверка нового профиля → контролируемый reconnect → удаление устаревшего endpoint.
@@ -211,7 +220,7 @@ C++17 / Qt 6 — сервисы приложения и модели Nekobox
 
 ### 5.2. Самостоятельный UI-пакет
 
-- [ ] Добавить интерфейс в `ui/shell/`: `index.html`, `styles/`, `components/`, `pages/`, `assets/`, `bridge/`, `fixtures/`. Имена — целевая структура, а не уже существующие файлы.
+- [ ] Реализовать самостоятельный shell в `ui/shell/` и подключить его как локальные resources. **Частично:** qrc shell, dashboard/servers/settings/logs и production QWebChannel integration существуют; assets/visual acceptance, полный набор компонентов и installer acceptance не закрыты. Предложенная структура каталогов выше — ориентир, не требование буквального совпадения.
 - [ ] Зафиксировать Figma node IDs, дату снимка, размеры, шрифты, SVG/PNG, token manifest и эталонные изображения всех пяти экранов.
 - [ ] Скачать исходные assets, хранить локально, проверить размеры и места использования. В приложении не должно быть временных URL Figma, CDN-шрифтов и runtime-загрузки стилей.
 - [ ] Не использовать screenshot как фон интерфейса. Перенести макет в настоящие управляемые компоненты, адаптируя reference-код к выбранному стеку.
@@ -235,8 +244,8 @@ C++17 / Qt 6 — сервисы приложения и модели Nekobox
 
 ## 6. Этап 3 — объединение компонентов
 
-- [ ] Подключить `ui/shell` к Qt resources либо устанавливаемому resource-каталогу; удалить зависимость от внешнего `newdesign` и пользовательских абсолютных путей.
-- [ ] Заменить крупные инъекции JavaScript и распознавание элементов по тексту на versioned bridge contract, стабильные IDs и события изменения состояния.
+- [ ] Подключить `ui/shell` к Qt resources либо устанавливаемому resource-каталогу; удалить зависимость от внешнего `newdesign` и пользовательских абсолютных путей. **Частично:** подключено через qrc; проверить packaging/offline и остальные legacy paths.
+- [ ] Заменить крупные инъекции JavaScript и распознавание элементов по тексту на versioned bridge contract, стабильные IDs и события изменения состояния. **Частично:** managed shell bridge commands/events и стабильные IDs используются; legacy injections/polling ещё присутствуют, полный versioned state contract не завершён.
 - [ ] UI получает snapshots/deltas: subscriptions, profiles, core status/version, traffic, settings, route source, errors и logs. Подписочный трафик отличается от счётчиков текущей сессии.
 - [ ] Команды: import/update/remove subscription, select group/server, connect/disconnect, mode switch, settings update, route override, log pause/clear/copy/export, window/tray actions.
 - [ ] Для команд определить request ID, success/error, timeout, progress/cancel, защиту от двойного нажатия. Из UI не запускать процессы произвольной строкой.
@@ -353,8 +362,4 @@ C++17 / Qt 6 — сервисы приложения и модели Nekobox
 - Qt Widgets: `https://doc.qt.io/qt-6/qtwidgets-index.html` — C++ desktop UI.
 - QWebChannel: `https://doc.qt.io/qt-6/qwebchannel.html` — связь QObject/C++ с HTML/JavaScript.
 
-Первичное исследование выполнено по перечисленным файлам и дизайну. Сборка приложения, runtime-проверка сторонних форков, живой mikan-стенд и релизные испытания на этом шаге **ещё не выполнены** и включены в этапы 0–4.
-
-**Последующий MIG-06/R1 (`dffc6b0`):** checked per-file Save через QSaveFile, без direct-write fallback, полная запись/commit проверены, cache только после success. Bool `Save()` остаётся changed hint; sanitized warning не заменяет caller/UI failure handling. Exact Windows Release build PASS, valid-root до/после PASS, atomic-v1 suite выполнен дважды; immediate retry/no-change readback и callback mutation проверены. Evidence/review — `test/subscription-parser/LEGACY_PERSISTENCE.md`. Non-destructive loader, verified backup/rollback, interruption/disk-full/short-write и multi-store atomic apply остаются открыты; флажок contracts/migration не закрыт.
-
-**MIG-07/R2, 2026-10-17:** rejected profile originals больше не удаляются loader; ID зарезервированы, stale delete не трогает пропущенный профиль, reorder отказывает при rejected input. Windows Release build PASS, valid-root до/после PASS; 11 synthetic cases выполнены дважды, включая all-invalid/max-ID, занятый следующий ID и default35 при повреждении всех групп. Детали: `test/subscription-parser/LEGACY_LOAD_PRESERVATION.md`. Это не verified backup/quarantine/rollback, concurrent no-clobber или завершение migration gate; флажок остаётся открытым.
+Этот абзац описывает состояние первичного исследования 2026-10-14: тогда сборка приложения, runtime-проверка сторонних форков, mikan-стенд и релизные испытания не выполнялись. Последующие частичные результаты помечены в этапах выше; он не является текущим статусом. Полная приёмка и release gates остаются незакрытыми.

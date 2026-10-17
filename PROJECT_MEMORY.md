@@ -10,6 +10,7 @@
 - MDMBOX: `https://github.com/come0th3r/mdmbox`; mikan compatibility snapshot `a7b32c3efdfe85fe2450940f876fbb27fcf11ecc`.
 - Figma: `dpomJg0l41jhSZfAZOV2fB`, frames `6:8`, `9:2`, `6:347`, `6:736`, `6:1077`.
 - Основной acceptance checklist: `docs/BETA_ILYA_UPGRADE_PLAN.md`. Runtime evidence: `test/managed-profile/README.md`, `test/subscription-parser/README.md`, `docs/STAGE0_BASELINE.md`.
+- **Передача 2026-10-17:** пользователь разрешил отправить текущую работу на GitHub для другого UI-разработчика. Разрешён обычный push в `beta-ilya`; merge-main/release/force-push не разрешены. Текущие ранее незакоммиченные project sources/resources/test/docs/packaging сохраняются отдельным WIP handoff, не выдаются за проверенный релиз. Инструкция: `docs/UI_DEVELOPER_HANDOFF.md`. Secrets/env, логи, локальные agent configs и промежуточные screenshots не публиковать. UI-разработчику работать в отдельной ветке от `beta-ilya`.
 
 ## Машины и SSH-доступ
 
@@ -25,7 +26,7 @@
 
 ## Текущий статус
 
-Последний проверенный baseline перед MIG-10 commit **2026-10-17**: `beta-ilya`, HEAD `8089e4b` (MIG-09 detached restore), ahead10; index в начале пуст. Scope/env-ignore сохранён как `9fccacd`, MIG-08 как `e11e245`, MIG-07 как `f912b31`; локальные commits через **Fork GUI**, index подготовлен точечно Git CLI. MIG-10/R3 executable source совпадает с выполненным snapshot на базе `8089e4b`; подготовка отдельного локального commit через Fork. Worktree содержит многочисленные прежние backend, shell UI, alpha/notices, fixtures, screenshots и документы; не чистить/не включать в task commits. Перед следующим действием заново проверить branch/HEAD/status/staged diff. Push не разрешён.
+Baseline перед UI-handoff **2026-10-17**: `beta-ilya`, HEAD `8f9c921` (MIG-10 checked callers), ahead11 к GitHub `78196bf`, index пуст; GitHub main `a7a9d13`. Scope/env-ignore `9fccacd`, MIG-09 `8089e4b`, MIG-08 `e11e245`, MIG-07 `f912b31`; локальные commits через **Fork GUI**, index подготовлен точечно Git CLI. По новому указанию отправить эти commits и отдельный WIP source handoff в beta-ilya. C++ runtime evidence остаётся привязанным к MIG-10/R3; новая полная handoff/clean-checkout сборка и visual acceptance NOT RUN. Факт push проверять по remote SHA после операции; этот абзац описывает состояние ДО handoff, не гарантирует отправку. Локальные служебные файлы сохранять вне commit.
 
 Этапы 0–4 не считать целиком закрытыми. Основные компоненты уже существуют, но обязательные protocol, visual, system, packaging и release gates остаются открытыми.
 
@@ -67,6 +68,10 @@
 ## Следующее направление
 
 Приоритет пользователя: **сначала полностью закрыть этапы 0 и 1; UI, Figma visual acceptance и polishing отложить на последнее место**. До завершения этапов 0/1 не переключаться на UI, кроме исправлений, необходимых для проверки backend или устранения блокирующего дефекта.
+
+Новое указание: временная передача UI другому разработчику разрешена отдельно;
+подготовлен `docs/UI_DEVELOPER_HANDOFF.md`. Не продолжать здесь backend/UI изменения
+параллельно без согласования владельцев файлов. Остальные этапы и gates не закрыты.
 
 Ближайшая последовательность:
 

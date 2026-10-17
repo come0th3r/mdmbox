@@ -1,6 +1,6 @@
 # Этап 0: исходное окружение и диагностика
 
-Дата: 2026-10-14. Ветка: `beta-ilya`. Этап 0 **не завершён**.
+Исследование начато 2026-10-14; ниже сохранён хронологический журнал исходного baseline. Он не является текущим status dashboard: ранние BLOCKED/NOT RUN формулировки относятся к состоянию до установки build-host и последующих проверок. По состоянию на 2026-10-17 Qt/MSVC builds, managed runtime, synthetic E2E и ограниченный clean-VM alpha startup/shutdown подтверждены отдельно; воспроизводимая clean-checkout baseline текущего HEAD и release gates по-прежнему не закрыты. Актуальный handoff: `PROJECT_MEMORY.md`; acceptance checklist: `docs/BETA_ILYA_UPGRADE_PLAN.md`.
 
 ## Инструменты
 
@@ -18,39 +18,26 @@ node --test test/subscription-probe.test.mjs
 node tools/subscription-probe.mjs --help
 ```
 
-Если Node.js отсутствует в PATH, использовать найденный `node.exe`. Проверенная локальная версия: **24.20.0**.
+Если Node.js отсутствует в PATH, использовать найденный `node.exe`. Локальная версия во время первоначального preflight (2026-10-14): **24.20.0**; позже на отдельном build-host проверен Node.js 24.21.0.
 
-Ссылку передавать через приватно заданную переменную `MDMBOX_TEST_SUBSCRIPTION_URL`, не через аргументы CLI и не через tracked-файлы. По умолчанию probe использует HEAD. `--get` выполняет чтение профиля; панель может учитывать запрос или зарегистрировать устройство. После проверки удалить переменную окружения. Не вставлять секрет в команды, сохраняемые в истории терминала.
+Все команды и параметры probe ниже относятся только к синтетическим localhost fixtures. Не передавать live-panel URL, реальные subscription URL или device identifiers; прежние инструкции для ручного live-запроса отозваны.
 
 Дополнительные переменные:
 
 - `MDMBOX_PROBE_FORMAT`: `uri`, `clash`, `singbox`.
 - `MDMBOX_PROBE_USER_AGENT`: по умолчанию `MDMBOX-contract-probe/0.1`. Runtime-UA должен соответствовать реально установленному ядру; не подставлять выдуманную версию.
-- `MDMBOX_TEST_HWID`: стабильный тестовый идентификатор при необходимости device binding. Не использовать реальный HWID в fixtures или отчётах.
-- `MDMBOX_PROBE_HWID_RANDOM=1`: только для разового теста регистрации; повторные вызовы могут расходовать слоты. По умолчанию выключено.
+- `MDMBOX_TEST_HWID`: только synthetic fixture identifier; реальные HWID не использовать.
+- `MDMBOX_PROBE_HWID_RANDOM=1`: историческая опция; не использовать против live-panel.
 
 ## Подтверждённые результаты
 
 Автономные тесты: **14/14 PASS** (`node --test test/subscription-probe.test.mjs`); синтаксический разбор PowerShell preflight — PASS; `git diff --check` — PASS. Тесты покрывают query/format, HTTPS restrictions, metadata, privacy summaries, redirects, HTTP errors, size limits и некорректные настройки.
 
-На текущей машине preflight вернул **BLOCKED: 19 checks**. Найдены Node.js и исходники QHotkey. Не найдены в проверенных местах MSVC, CMake, Ninja, Go, семь Qt 6 package configs, четыре C++ package configs и четыре checkout Go replacements. Это не доказательство отсутствия SDK в произвольных других каталогах.
+На локальной машине исходный preflight 2026-10-14 вернул **BLOCKED: 19 checks**. Были найдены Node.js и исходники QHotkey; в проверенных местах не найдены MSVC, CMake, Ninja, Go, семь Qt 6 package configs, четыре C++ package configs и четыре checkout Go replacements. Это исторический результат, не текущий preflight и не доказательство отсутствия SDK в произвольных каталогах.
 
-На предоставленной пользователем тестовой подписке, без HWID и без подмены версии ядра:
+Ранее записанные сводки live subscription probe исключены из актуальной evidence: их результаты не следует использовать или повторять. Здесь не сохраняются URL, содержимое профиля и endpoints. Таблицы старого runtime/build статуса ниже также относятся только к датам своих записей.
 
-| Проверка | Результат |
-| --- | --- |
-| HTTPS HEAD исходного URL | HTTP 200; признаки traffic/title metadata; интервал 1 час |
-| GET `format=uri` | HTTP 200; 8216 bytes; Base64; 20 ссылок: 16 VLESS, 4 TUIC |
-| GET `format=clash` | HTTP 200; 15050 bytes; YAML candidate; найдены proxies, proxy-groups, rules, dns |
-| Metadata GET | Признаки upload/download/total/expire, title/support/page; interval 1 час |
-| Проверенные HWID notice headers | Не обнаружены; это не доказательство отсутствия ограничений устройства |
-| Core config validation | NOT RUN — нужное закреплённое ядро ещё не получено |
-| Runtime/protocol E2E | NOT RUN |
-| Baseline Release / clean Windows VM | BLOCKED — toolchain/dependencies и VM ещё не подготовлены |
-
-Ссылку, endpoints и содержимое профиля не сохраняли в репозиторий. Наличие секций не означает корректность YAML или сохранение policy существующим importer. Набор протоколов относится только к этому ответу с диагностическим UA, не ко всей панели.
-
-## Следующий шаг
+## Дальнейшие проверки (хронологический журнал)
 
 ### Дополнение: удалённый стенд, 2026-10-15
 
@@ -80,7 +67,7 @@ $configureArgs = @(
 
 В preflight удалено ложное требование C++ gRPC: `cmake/myproto.cmake` требует Protobuf, не gRPC package. Ранее записанные 19/12/5 BLOCKED — исторические результаты прежнего preflight, не текущий статус.
 
-**NOT RUN:** запуск mdmbox/WebEngine, Qt deployment, Go core build, protocol E2E, installer и чистая VM-проверка. GUI-only build не закрывает baseline/release gate этапа 0. Следующие задачи — воспроизводимые scripts, согласование sing replacement, Go build и изолированный runtime smoke без изменения proxy/TUN.
+**На момент этой записи (2026-10-15) NOT RUN:** запуск mdmbox/WebEngine, Qt deployment, Go core build, protocol E2E, installer и чистая VM-проверка. Эти пункты частично закрыты последующими историческими записями ниже; не использовать эту строку как текущий статус. GUI-only build сам по себе не закрывал baseline/release gate этапа 0.
 
 ### Воспроизводимый GUI entry point и попытка Go build
 
@@ -116,7 +103,7 @@ Go core build теперь **выполнен и FAILED**, запуск core/run
 - `core check` синтетического direct-only config без inbounds — **PASS**; неизвестный outbound type отклонён с ненулевым exit code — **PASS**.
 - Manifests приложения не менялись. На стенде остаётся ранее скопированный untracked GUI script; перед pull сопоставить с tracked версией, не удалять чужие файлы.
 
-Это снимает прежний blocker **компиляции ядра**, но не доказывает proxy/TUN/RPC или протокольную совместимость. GUI/WebEngine deployment/runtime, loopback connection smoke, E2E и чистая VM — NOT RUN. Обычный build не должен неявно применять патчи; закреплённый bootstrap ещё предстоит оформить.
+Это снимает прежний blocker **компиляции ядра**, но не доказывает proxy/TUN/RPC или протокольную совместимость. На дату записи GUI/WebEngine deployment/runtime, loopback connection smoke, E2E и чистая VM — NOT RUN. Последующие разделы содержат результаты этих отдельных шагов; закреплённый full bootstrap/release reproduction остаётся открытым.
 
 ### Loopback data-path smoke
 
@@ -139,11 +126,10 @@ node tools/core-loopback-smoke.mjs <path-to-nekobox_core.exe>
 - Loopback HTTP inbound → direct outbound → origin — PASS два последовательных запуска, ровно один origin request каждый раз.
 - Несуществующий core executable — ожидаемый FAIL с exit code 1, без зависания; затем повторный положительный запуск — PASS.
 
-Локальный вызов Node по PATH не выполнен (команда не найдена); все указанные
+Локальный вызов Node по PATH не выполнен на момент проверки (команда не найдена); все указанные
 результаты получены на удалённом стенде. Проверка не читает реальные профили,
 не меняет system proxy/TUN/routes и не обращается к внешнему origin.
-**NOT TESTED:** RPC, DNS-политика, VPN-протоколы, TUN и внешние соединения.
-GUI/WebEngine deployment/runtime и clean-VM gate остаются NOT RUN.
+**На момент этого smoke NOT TESTED:** RPC, DNS-политика, VPN-протоколы, TUN и внешние соединения. Позднейшие synthetic/runtime tests частично расширили покрытие, но ограничения и clean-VM/release gates см. в актуальной памяти и плане.
 
 ### Проверяемый core build entry point
 
@@ -162,7 +148,7 @@ verification; после сборки восстанавливает измен�
 Новый артефакт прошёл loopback smoke — **PASS**. Исходники приложения не
 изменялись; сборка использовала удалённый checkout 8b06edc плюс явно
 скопированные build script/test fixture. Полный dependency bootstrap и
-негативные тесты проверок provenance пока NOT RUN.
+негативные тесты проверок provenance на дату этой записи были NOT RUN.
 
 ### Qt WebEngine deployment smoke, 2026-10-15
 
@@ -232,7 +218,7 @@ HTML/JS и QWebChannel roundtrip с очищенным SDK PATH — повтор
 VMware LLVMPipe/Vulkan/GPU/DPI warnings сохраняются. Наличие redist installer
 не означает проверку его установки на чистой Windows. Это исправление
 конкретного missing dependency, а не аудит всех DLL или release-ready package.
-Запуск самого MDMBOX пока NOT RUN: перед ним проверить startup/shutdown
+На момент этой записи запуск самого MDMBOX ещё NOT RUN: перед ним проверить startup/shutdown
 side effects, отдельный data directory и отсутствие изменения system proxy.
 
 ### Изолированное наблюдение запуска MDMBOX
@@ -248,17 +234,15 @@ remember_spmode empty. Startup умеет восстанавливать эти 
 
 - Клиент жив; прямые дочерние процессы `QtWebEngineProcess.exe` и `nekobox_core.exe` присутствуют.
 - `MainWindowHandle=0`, title empty: отображение окна не подтверждено.
-- `newdesign` отсутствует. `navigate()` возвращает управление без загрузки страницы; это известный дефект отсутствующих shell assets, а не готовый UI.
+- `newdesign` отсутствовал в том alpha deployment. Это исторический дефект того source/archive; позднее новый `ui/shell/` подключён как qrc resource. Не переносить это наблюдение на текущий shell.
 - Значения HKCU Internet Settings ProxyEnable/ProxyServer/ProxyOverride/AutoConfigURL совпали до запуска, во время наблюдения и после очистки. Это не аудит всех системных сетевых настроек.
 - В stderr VMware SVGA fallback LLVMPipe.
 
 Созданный клиент и наблюдавшиеся прямые дети принудительно завершены.
 Graceful shutdown, RPC handshake/readiness, потомки второго уровня, окно и
-production bridge **NOT VERIFIED**. Наличие процесса ядра не доказывает
-успешный RPC. Далее исследовать окно/assets и оформить проверяемый startup/
-shutdown harness; clean-VM/installer gates остаются NOT RUN.
+production bridge **на том наблюдении NOT VERIFIED**. Наличие процесса ядра не доказывает
+успешный RPC. Позднее были отдельные interactive/clean-VM alpha startup/shutdown и
+production bridge проверки; они не превращают это старое наблюдение в полный
+installer/release gate. Чистая baseline-сборка текущего HEAD всё ещё не подтверждена.
 
-1. Восстановить закреплённые checkout libneko/sing-box/sing-quic; установить происхождение `sing`, которого нет в `libs/get_source_env.sh`, но есть в Go replacements.
-2. Зафиксировать Windows toolchain и checksums SDK/dependency bundles; убрать прежние мутации manifests и персональные пути из build flow.
-3. Выполнить локальный baseline, затем обязательную чистую VM-сборку.
-4. Получить и проверить mihomo, повторить профильный запрос с честным runtime-UA и config-check. Затем переходить к transactional update и synthetic fixtures.
+Исторический next-step списка на момент 2026-10-15 (не текущий план): восстановить dependencies, зафиксировать toolchain, выполнить clean baseline и подключить mihomo. Позднейшие разделы документируют частичное выполнение этих задач. Текущие blockers и следующий handoff находятся в `PROJECT_MEMORY.md` и `docs/BETA_ILYA_UPGRADE_PLAN.md`.

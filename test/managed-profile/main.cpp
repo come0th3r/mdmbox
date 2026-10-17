@@ -7,14 +7,19 @@
 #include "../../sub/ManagedRuntimePolicy.hpp"
 #include <QUrlQuery>
 #include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLockFile>
+#include <QSemaphore>
 #include <QTemporaryDir>
 #include <QTextStream>
+#include <chrono>
+#include <thread>
 #include <yaml-cpp/yaml.h>
 
 int main(int argc, char **argv) {
@@ -58,6 +63,32 @@ int main(int argc, char **argv) {
         "rules: ['DOMAIN,example.invalid,select', 'MATCH,select']\n"
         "dns: {enable: true, nameserver: [127.0.0.1]}\n"
         "rule-providers: {synthetic: {type: file, path: rules/synthetic.yaml}}\n";
+
+    const QByteArray fullProfile =
+        "# full synthetic panel document\n"
+        "mixed-port: 17890\nmode: rule\n\n"
+        "proxies:\n"
+        "  - {name: node-a, type: socks5, server: 127.0.0.1, port: 12345, future-field: keep}\n"
+        "  - {name: node-b, type: http, server: 127.0.0.1, port: 12346}\n"
+        "proxy-groups:\n"
+        "  - {name: select, type: select, proxies: [node-a, node-b, DIRECT]}\n"
+        "  - {name: fallback, type: fallback, proxies: [select, node-b], url: 'https://example.invalid/check', interval: 300}\n"
+        "rules:\n"
+        "  - 'DOMAIN,first.example,select'\n"
+        "  - 'IP-CIDR,192.0.2.0/24,fallback,no-resolve'\n"
+        "  - 'MATCH,select'\n"
+        "rule-providers:\n"
+        "  synthetic-domain: {type: http, behavior: domain, url: 'https://example.invalid/domain.yaml', path: ./rules/domain.yaml, interval: 3600}\n"
+        "  synthetic-ip: {type: file, behavior: ipcidr, path: ./rules/ip.yaml, format: yaml}\n"
+        "dns:\n"
+        "  enable: true\n  ipv6: false\n  enhanced-mode: fake-ip\n"
+        "  nameserver: [127.0.0.1, 'https://dns.example.invalid/dns-query']\n"
+        "  fallback: ['tls://dns.example.invalid']\n"
+        "  nameserver-policy: {'domain:example.invalid': [127.0.0.1]}\n"
+        "  fake-ip-filter: ['*.example.invalid', 'localhost']\n"
+        "hosts: {synthetic.example.invalid: 192.0.2.10}\n"
+        "profile: {store-selected: true, store-fake-ip: false}\n"
+        "unified-delay: true\n";
     NekoGui_sub::ManagedProfile profile;
     QString error;
     if (!NekoGui_sub::ManagedProfile::ParseMihomo(source, profile, error)) return 1;
@@ -126,6 +157,29 @@ int main(int argc, char **argv) {
         projected.rules != runtimeCandidate.rules || projected.proxyNames != runtimeCandidate.proxyNames ||
         runtimeCandidate.source.contains("external-controller")) return 56;
     const auto projectedBytes = projected.source;
+    const auto panelSourceBeforeOverrides = runtimeCandidate.source;
+    const auto panelRulesBeforeOverrides = runtimeCandidate.rules;
+    NekoGui_sub::ManagedRuntimeRuleOverrides overrides;
+    overrides.technicalRules = {"IP-CIDR,127.0.0.1/32,DIRECT,no-resolve"};
+    overrides.localRules = {"DOMAIN-SUFFIX,local.example,select"};
+    NekoGui_sub::ManagedProfile overrideProjection;
+    if (!NekoGui_sub::ManagedRuntimePolicy::projectLoopback(runtimeCandidate, 12345, 12346,
+            QByteArray(64, 'a'), overrides, overrideProjection, error)) return 111;
+    const QStringList expectedOverrideRules{
+        "IP-CIDR,127.0.0.1/32,DIRECT,no-resolve",
+        "DOMAIN-SUFFIX,local.example,select",
+        "DOMAIN,example.invalid,select", "MATCH,select"};
+    const auto overrideRoot = YAML::Load(overrideProjection.source.toStdString());
+    if (overrideProjection.rules != expectedOverrideRules ||
+        runtimeCandidate.source != panelSourceBeforeOverrides ||
+        runtimeCandidate.rules != panelRulesBeforeOverrides ||
+        overrideRoot["rules"].size() != size_t(expectedOverrideRules.size())) return 112;
+    const auto overrideBytes = overrideProjection.source;
+    overrides.localRules = {"   "};
+    if (NekoGui_sub::ManagedRuntimePolicy::projectLoopback(runtimeCandidate, 12345, 12346,
+            QByteArray(64, 'a'), overrides, overrideProjection, error) || error.isEmpty() ||
+        overrideProjection.source != overrideBytes || runtimeCandidate.source != panelSourceBeforeOverrides) return 113;
+    QTextStream(stdout) << "MANAGED_RULE_LAYER_PRIORITY_AND_PANEL_IMMUTABILITY_PASS\n";
     if (NekoGui_sub::ManagedRuntimePolicy::projectLoopback(runtimeCandidate, 80, 12346, QByteArray(64, 'a'), projected, error) ||
         NekoGui_sub::ManagedRuntimePolicy::projectLoopback(runtimeCandidate, 12345, 12345, QByteArray(64, 'a'), projected, error) ||
         NekoGui_sub::ManagedRuntimePolicy::projectLoopback(runtimeCandidate, 12345, 12346, "bad", projected, error) ||
@@ -138,7 +192,6 @@ int main(int argc, char **argv) {
              {"type: socks5", "type: socks5, dialer-proxy: node"},
              {"type: socks5", "type: socks5, interface-name: synthetic"},
              {"type: socks5", "type: socks5, future-field: keep"},
-             {"type: socks5", "type: http"},
              {"type: select", "type: url-test, url: https://example.invalid/check"},
              {"proxies: [node, DIRECT]", "proxies: [select]"},
              {"nameserver: [127.0.0.1]", "nameserver: ['https://example.invalid/dns-query']"},
@@ -150,6 +203,16 @@ int main(int argc, char **argv) {
                 QByteArray(64, 'a'), projected, error) || projected.source != projectedBytes) return 60;
     }
     QTextStream(stdout) << "MANAGED_NESTED_RUNTIME_GATE_PASS\n";
+    auto httpProxyProfile = selfContained;
+    httpProxyProfile.replace("type: socks5", "type: http");
+    if (!NekoGui_sub::ManagedProfile::ParseMihomo(httpProxyProfile, runtimeCandidate, error) ||
+        !NekoGui_sub::ManagedRuntimePolicy::checkSelfContained(runtimeCandidate, error) ||
+        !NekoGui_sub::ManagedRuntimePolicy::projectLoopback(runtimeCandidate, 12345, 12346,
+            QByteArray(64, 'a'), projected, error)) return 114;
+    const auto httpProxyRoot = YAML::Load(projected.source.toStdString());
+    if (httpProxyRoot["proxies"][0]["type"].as<std::string>() != "http" ||
+        projected.proxyNames != runtimeCandidate.proxyNames) return 115;
+    QTextStream(stdout) << "MANAGED_HTTP_PROXY_PROJECTION_PASS\n";
     QTemporaryDir directory;
     if (!directory.isValid()) return 4;
     const auto identityDirectory = QDir(directory.path()).filePath("identity");
@@ -181,6 +244,29 @@ int main(int argc, char **argv) {
     };
     const auto path = QDir(directory.path()).filePath("7.json");
     if (!store.commit(7, source, accept, error) || !store.load(7, profile, error) || profile.source != source) return 5;
+    NekoGui_sub::ManagedProfile fullParsed;
+    if (!NekoGui_sub::ManagedProfile::ParseMihomo(fullProfile, fullParsed, error) ||
+        fullParsed.source != fullProfile || fullParsed.rules != QStringList{
+            "DOMAIN,first.example,select", "IP-CIDR,192.0.2.0/24,fallback,no-resolve", "MATCH,select"} ||
+        !store.commit(70, fullProfile, accept, error) || !store.load(70, fullParsed, error) ||
+        fullParsed.source != fullProfile || fullParsed.sha256 != QCryptographicHash::hash(fullProfile, QCryptographicHash::Sha256).toHex()) return 52;
+    const auto fullYaml = YAML::Load(fullParsed.source.toStdString());
+    const auto storedRules = fullYaml["rules"];
+    const auto storedGroups = fullYaml["proxy-groups"];
+    const auto storedProviders = fullYaml["rule-providers"];
+    const auto storedDns = fullYaml["dns"];
+    if (!storedRules.IsSequence() || storedRules.size() != 3 ||
+        storedRules[0].as<std::string>() != "DOMAIN,first.example,select" ||
+        storedRules[1].as<std::string>() != "IP-CIDR,192.0.2.0/24,fallback,no-resolve" ||
+        storedRules[2].as<std::string>() != "MATCH,select" ||
+        !storedGroups.IsSequence() || storedGroups.size() != 2 ||
+        storedGroups[0]["proxies"].size() != 3 || storedGroups[1]["type"].as<std::string>() != "fallback" ||
+        storedProviders.size() != 2 || storedProviders["synthetic-domain"]["interval"].as<int>() != 3600 ||
+        !storedDns["enable"].as<bool>() || storedDns["enhanced-mode"].as<std::string>() != "fake-ip" ||
+        storedDns["nameserver-policy"]["domain:example.invalid"][0].as<std::string>() != "127.0.0.1" ||
+        fullYaml["hosts"]["synthetic.example.invalid"].as<std::string>() != "192.0.2.10" ||
+        !fullYaml["profile"]["store-selected"].as<bool>() || !fullYaml["unified-delay"].as<bool>()) return 53;
+    QTextStream(stdout) << "MANAGED_FULL_PROFILE_ORDERED_ROUNDTRIP_PASS\n";
     const auto original = readBytes(path);
     if (store.commit(7, source, reject, error) || error.contains("private") || readBytes(path) != original) return 6;
     if (store.commit(7, {}, accept, error) || store.commit(7, source, {}, error) ||
@@ -273,6 +359,38 @@ int main(int argc, char **argv) {
     if (refresh(accept) || readBytes(servicePath) != serviceBytes) return 35;
     serviceMetadata.expiry.reset();
     if (refresh(reject) || readBytes(servicePath) != serviceBytes) return 36;
+    const QByteArray providerCandidate =
+        "proxies: [{name: node, type: socks5, server: 127.0.0.1, port: 12345}]\n"
+        "proxy-groups: [{name: select, type: select, proxies: [node, DIRECT]}]\n"
+        "rules: ['RULE-SET,synthetic,DIRECT', 'MATCH,select']\n"
+        "rule-providers:\n"
+        "  synthetic: {type: file, behavior: domain, path: ./rules/synthetic.yaml, format: yaml}\n"
+        "dns: {enable: true, nameserver: [127.0.0.1]}\n";
+    NekoGui_sub::ManagedProfile parsedProvider;
+    if (!NekoGui_sub::ManagedProfile::ParseMihomo(providerCandidate, parsedProvider, error) ||
+        !parsedProvider.source.contains("RULE-SET,synthetic,DIRECT") ||
+        !parsedProvider.source.contains("rule-providers:")) return 109;
+    const auto providerFetcher = [&](const NekoGui_sub::ManagedSubscriptionRequest &, const QString &,
+                                     NekoGui_sub::SubscriptionDownload &download, QString &, const std::atomic_bool *) {
+        download.source = providerCandidate;
+        download.metadata = serviceMetadata;
+        return true;
+    };
+    NekoGui_sub::SubscriptionService::CommittedSnapshot providerOutput;
+    providerOutput.profile.source = QByteArray("provider-output-sentinel");
+    providerOutput.metadata.title = QStringLiteral("provider-output-sentinel");
+    bool providerValidatorCalled = false;
+    const NekoGui_sub::ManagedProfileStore::Validator providerValidator =
+        [&](const NekoGui_sub::ManagedProfile &candidate, QString &validationError) {
+            providerValidatorCalled = true;
+            return NekoGui_sub::ManagedRuntimePolicy::checkSelfContained(candidate, validationError);
+        };
+    if (NekoGui_sub::SubscriptionService::refresh(10, QUrl("https://example.invalid/provider-fixture"),
+            "0.1.0", copiedDirectory, store, providerFetcher, providerValidator, error, nullptr, &providerOutput) ||
+        !providerValidatorCalled || error.isEmpty() || readBytes(servicePath) != serviceBytes ||
+        providerOutput.profile.source != QByteArray("provider-output-sentinel") ||
+        providerOutput.metadata.title != QStringLiteral("provider-output-sentinel")) return 110;
+    QTextStream(stdout) << "SUBSCRIPTION_PROVIDER_RESOURCE_REJECTION_PRESERVES_LAST_KNOWN_GOOD_PASS\n";
     std::atomic_bool cancelled{false};
     const auto cancelDuringValidation = [&](const NekoGui_sub::ManagedProfile &, QString &) {
         cancelled = true;
@@ -283,6 +401,144 @@ int main(int argc, char **argv) {
         QLockFile lock(QDir(copiedDirectory).filePath("subscription-refresh-10.lock"));
         if (!lock.tryLock() || refresh(accept) || readBytes(servicePath) != serviceBytes) return 38;
     }
+    // Deterministic overlapping service calls: hold the first request inside
+    // its fetcher, then submit a second refresh for the same group. It must be
+    // refused before its fetcher runs, while the first exact commit succeeds.
+    if (!store.commit(12, source, serviceMetadata, accept, error)) return 105;
+    QSemaphore fetchEntered, releaseFetch;
+    const auto concurrentCandidate = source + "# concurrent refresh winner\n";
+    auto concurrentMetadata = serviceMetadata;
+    concurrentMetadata.title = "Concurrent winner";
+    NekoGui_sub::SubscriptionService::CommittedSnapshot concurrentCommitted;
+    QString concurrentError;
+    bool concurrentSuccess = false;
+    int firstFetcherCalls = 0;
+    const NekoGui_sub::SubscriptionService::Fetcher blockingFetch =
+        [&](const NekoGui_sub::ManagedSubscriptionRequest &, const QString &,
+            NekoGui_sub::SubscriptionDownload &download, QString &fetchError, const std::atomic_bool *) {
+            ++firstFetcherCalls;
+            fetchEntered.release();
+            if (!releaseFetch.tryAcquire(1, 10000)) {
+                fetchError = QStringLiteral("Concurrent fixture release timed out");
+                return false;
+            }
+            download.source = concurrentCandidate;
+            download.metadata = concurrentMetadata;
+            return true;
+        };
+    std::thread refreshThread([&] {
+        concurrentSuccess = NekoGui_sub::SubscriptionService::refresh(12,
+            QUrl("https://example.invalid/concurrent"), "0.1.0", copiedDirectory, store,
+            blockingFetch, accept, concurrentError, nullptr, &concurrentCommitted);
+    });
+    const bool enteredFetch = fetchEntered.tryAcquire(1, 5000);
+    int competingFetcherCalls = 0;
+    QString competingRefreshError;
+    NekoGui_sub::SubscriptionService::CommittedSnapshot competingCommitted;
+    const NekoGui_sub::SubscriptionService::Fetcher competingFetch =
+        [&](const NekoGui_sub::ManagedSubscriptionRequest &, const QString &,
+            NekoGui_sub::SubscriptionDownload &, QString &, const std::atomic_bool *) {
+            ++competingFetcherCalls;
+            return false;
+        };
+    const bool competingSuccess = NekoGui_sub::SubscriptionService::refresh(12,
+        QUrl("https://example.invalid/concurrent"), "0.1.0", copiedDirectory, store,
+        competingFetch, accept, competingRefreshError, nullptr, &competingCommitted);
+    releaseFetch.release();
+    refreshThread.join();
+    NekoGui_sub::ManagedProfile concurrentStored;
+    NekoGui_sub::SubscriptionMetadata concurrentStoredMetadata;
+    if (!enteredFetch || competingSuccess || competingFetcherCalls != 0 ||
+        competingRefreshError.isEmpty() || !concurrentSuccess || firstFetcherCalls != 1 ||
+        concurrentCommitted.profile.source != concurrentCandidate ||
+        concurrentCommitted.metadata.title != concurrentMetadata.title ||
+        !store.loadSnapshot(12, concurrentStored, concurrentStoredMetadata, error) ||
+        concurrentStored.source != concurrentCandidate ||
+        concurrentStoredMetadata.title != concurrentMetadata.title) return 106;
+    QTextStream(stdout) << "SUBSCRIPTION_CONCURRENT_REFRESH_SERIALIZED_EXACT_COMMIT_PASS\n";
+    // Expiry can cross while the core validator is running. The service must
+    // recheck the fetched policy after validation and before the store commit,
+    // preserving the prior last-known-good envelope and caller output.
+    auto expiringMetadata = serviceMetadata;
+    expiringMetadata.expiry = QDateTime::currentSecsSinceEpoch() + 2;
+    if (!store.commit(13, source, serviceMetadata, accept, error)) return 107;
+    const auto expiryPath = QDir(directory.path()).filePath("13.json");
+    const auto priorExpiryEnvelope = readBytes(expiryPath);
+    const auto expiringFetch = [&](const NekoGui_sub::ManagedSubscriptionRequest &, const QString &,
+                                   NekoGui_sub::SubscriptionDownload &download, QString &, const std::atomic_bool *) {
+        download.source = updated;
+        download.metadata = expiringMetadata;
+        return true;
+    };
+    bool expiryValidatorCalled = false;
+    const auto waitThroughExpiry = [&](const NekoGui_sub::ManagedProfile &, QString &) {
+        expiryValidatorCalled = true;
+        const auto expiryMs = *expiringMetadata.expiry * 1000;
+        while (QDateTime::currentMSecsSinceEpoch() <= expiryMs)
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        return true;
+    };
+    QString expiryError;
+    NekoGui_sub::SubscriptionService::CommittedSnapshot expiryCommitted;
+    expiryCommitted.profile.source = "committed output sentinel";
+    expiryCommitted.metadata.title = QStringLiteral("Output sentinel");
+    if (NekoGui_sub::SubscriptionService::refresh(13, QUrl("https://example.invalid/expiring"), "0.1.0",
+            copiedDirectory, store, expiringFetch, waitThroughExpiry, expiryError, nullptr, &expiryCommitted) ||
+        !expiryValidatorCalled || expiryError.isEmpty() || readBytes(expiryPath) != priorExpiryEnvelope ||
+        expiryCommitted.profile.source != "committed output sentinel" ||
+        expiryCommitted.metadata.title != QStringLiteral("Output sentinel")) return 108;
+    QTextStream(stdout) << "SUBSCRIPTION_EXPIRY_DURING_VALIDATION_PRESERVES_LAST_KNOWN_GOOD_PASS\n";
+    // Characterize the boundary with a writer that bypasses SubscriptionService.
+    // The store lock rejects a competing commit during validate+write, but
+    // there is no lease between refresh returning its captured commit and a
+    // later reconnect: a subsequent revocation writer may replace disk state.
+    if (!store.commit(14, source, serviceMetadata, accept, error)) return 109;
+    QSemaphore validationEntered, releaseValidation;
+    const auto serviceCandidate = updated + "# captured before external revocation\n";
+    NekoGui_sub::SubscriptionService::CommittedSnapshot capturedBeforeRevocation;
+    QString captureError;
+    bool captureSuccess = false;
+    const NekoGui_sub::SubscriptionService::Fetcher captureFetch =
+        [&](const NekoGui_sub::ManagedSubscriptionRequest &, const QString &,
+            NekoGui_sub::SubscriptionDownload &download, QString &, const std::atomic_bool *) {
+            download.source = serviceCandidate;
+            download.metadata = serviceMetadata;
+            return true;
+        };
+    const NekoGui_sub::ManagedProfileStore::Validator blockingValidator =
+        [&](const NekoGui_sub::ManagedProfile &, QString &) {
+            validationEntered.release();
+            return releaseValidation.tryAcquire(1, 10000);
+        };
+    std::thread captureThread([&] {
+        captureSuccess = NekoGui_sub::SubscriptionService::refresh(14,
+            QUrl("https://example.invalid/captured"), "0.1.0", copiedDirectory, store,
+            captureFetch, blockingValidator, captureError, nullptr, &capturedBeforeRevocation);
+    });
+    const bool enteredValidation = validationEntered.tryAcquire(1, 5000);
+    auto revokedMetadata = serviceMetadata;
+    revokedMetadata.expiry = 1;
+    int competingStoreValidatorCalls = 0;
+    const auto competingStoreValidator = [&](const NekoGui_sub::ManagedProfile &, QString &) {
+        ++competingStoreValidatorCalls;
+        return true;
+    };
+    QString duringCommitError;
+    const bool writeDuringCommit = store.commit(14, source, revokedMetadata, competingStoreValidator, duringCommitError);
+    releaseValidation.release();
+    captureThread.join();
+    if (!enteredValidation || writeDuringCommit || duringCommitError.isEmpty() || competingStoreValidatorCalls != 0 ||
+        !captureSuccess || capturedBeforeRevocation.profile.source != serviceCandidate) return 110;
+    QString revokeError;
+    if (!store.commit(14, source, revokedMetadata, accept, revokeError)) return 111;
+    NekoGui_sub::ManagedProfile afterRevocation;
+    NekoGui_sub::SubscriptionMetadata afterRevocationMetadata;
+    if (!store.loadSnapshot(14, afterRevocation, afterRevocationMetadata, error) ||
+        afterRevocation.source != source || afterRevocationMetadata.expiry != revokedMetadata.expiry ||
+        capturedBeforeRevocation.profile.source != serviceCandidate ||
+        capturedBeforeRevocation.metadata.expiry ||
+        afterRevocation.sha256 == capturedBeforeRevocation.profile.sha256) return 112;
+    QTextStream(stdout) << "SUBSCRIPTION_EXTERNAL_REVOCATION_AFTER_CAPTURE_IS_NOT_LATEST_WINS_PASS\n";
     if (committed.profile.source != source || committed.metadata.title != serviceMetadata.title ||
         committed.metadata.expiry || committed.metadata.upload != serviceMetadata.upload) return 104;
     QTextStream(stdout) << "SUBSCRIPTION_COMMITTED_SNAPSHOT_CAPTURE_PRESERVATION_PASS\n";

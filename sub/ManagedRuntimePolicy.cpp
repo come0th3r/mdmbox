@@ -15,9 +15,52 @@ namespace {
     // Deliberately narrow first execution contract, not protocol capability detection.
     bool reviewedNestedOptions(const YAML::Node &root) {
         for (const auto &proxy : root["proxies"]) {
-            if (!onlyKeys(proxy, {"name", "type", "server", "port", "username", "password", "udp"}) ||
-                proxy["type"].Scalar() != "socks5" || !proxy["server"].IsScalar() || !proxy["port"].IsScalar()) return false;
-            for (const auto &entry : proxy) if (!entry.second.IsScalar()) return false;
+            if (!proxy.IsMap() || !proxy["type"].IsScalar() || !proxy["server"].IsScalar() ||
+                !proxy["port"].IsScalar()) return false;
+            const auto type = QString::fromStdString(proxy["type"].Scalar());
+            if (type == QStringLiteral("socks5") || type == QStringLiteral("http")) {
+                const bool isSocks5 = type == QStringLiteral("socks5");
+                const QSet<QString> keys = isSocks5
+                    ? QSet<QString>{"name", "type", "server", "port", "username", "password", "udp"}
+                    : QSet<QString>{"name", "type", "server", "port", "username", "password"};
+                if (!onlyKeys(proxy, keys)) return false;
+                for (const auto &entry : proxy) if (!entry.second.IsScalar()) return false;
+                continue;
+            }
+            if (type != QStringLiteral("vless") ||
+                !onlyKeys(proxy, {"name", "type", "server", "port", "uuid", "flow", "tls", "network",
+                                  "servername", "client-fingerprint", "reality-opts"}) ||
+                proxy["server"].Scalar() != "127.0.0.1" || !proxy["port"].IsScalar() ||
+                !QRegularExpression(QStringLiteral("^[0-9]{1,5}$"))
+                     .match(QString::fromStdString(proxy["port"].Scalar())).hasMatch() ||
+                proxy["port"].as<int>() < 1 || proxy["port"].as<int>() > 65535 ||
+                !proxy["uuid"].IsScalar() ||
+                !QRegularExpression(QStringLiteral("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"))
+                     .match(QString::fromStdString(proxy["uuid"].Scalar())).hasMatch() ||
+                !proxy["flow"].IsScalar() || proxy["flow"].Scalar() != "xtls-rprx-vision" ||
+                !proxy["tls"].IsScalar() || proxy["tls"].Scalar() != "true" ||
+                !proxy["network"].IsScalar() || proxy["network"].Scalar() != "tcp" ||
+                !proxy["servername"].IsScalar() || proxy["servername"].Scalar().empty() ||
+                !proxy["client-fingerprint"].IsScalar() || proxy["client-fingerprint"].Scalar() != "chrome" ||
+                !onlyKeys(proxy["reality-opts"], {"public-key", "short-id"}) ||
+                !proxy["reality-opts"]["public-key"].IsScalar() ||
+                !QRegularExpression(QStringLiteral("^[A-Za-z0-9_-]{43}$"))
+                     .match(QString::fromStdString(proxy["reality-opts"]["public-key"].Scalar())).hasMatch() ||
+                !proxy["reality-opts"]["short-id"].IsScalar() ||
+                !QRegularExpression(QStringLiteral("^(?:[0-9a-fA-F]{2}){1,8}$"))
+                     .match(QString::fromStdString(proxy["reality-opts"]["short-id"].Scalar())).hasMatch()) return false;
+            const auto port = proxy["port"].as<unsigned int>();
+            const auto encodedPublicKey = QByteArray::fromBase64(
+                QByteArray::fromStdString(proxy["reality-opts"]["public-key"].Scalar()),
+                QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
+            const auto shortId = QByteArray::fromHex(
+                QByteArray::fromStdString(proxy["reality-opts"]["short-id"].Scalar()));
+            if (port < 1 || port > 65535 || encodedPublicKey.size() != 32 || shortId.isEmpty() || shortId.size() > 8)
+                return false;
+            for (const auto &entry : proxy) {
+                if (QString::fromStdString(entry.first.Scalar()) != QStringLiteral("reality-opts") &&
+                    !entry.second.IsScalar()) return false;
+            }
         }
         QSet<QString> targets{"DIRECT", "REJECT"};
         for (const auto &proxy : root["proxies"]) targets.insert(QString::fromStdString(proxy["name"].Scalar()));
@@ -52,6 +95,14 @@ namespace {
 namespace NekoGui_sub {
     bool ManagedRuntimePolicy::projectLoopback(const ManagedProfile &profile, int mixedPort, int controllerPort,
                                                const QByteArray &apiToken, ManagedProfile &result, QString &error) {
+        return projectLoopback(profile, mixedPort, controllerPort, apiToken,
+                               ManagedRuntimeRuleOverrides{}, result, error);
+    }
+
+    bool ManagedRuntimePolicy::projectLoopback(const ManagedProfile &profile, int mixedPort, int controllerPort,
+                                               const QByteArray &apiToken,
+                                               const ManagedRuntimeRuleOverrides &overrides,
+                                               ManagedProfile &result, QString &error) {
         error.clear();
         static const QRegularExpression token(QStringLiteral("^[a-f0-9]{64}$"));
         if (mixedPort < 1024 || mixedPort > 65535 || controllerPort < 1024 || controllerPort > 65535 ||
@@ -60,10 +111,16 @@ namespace NekoGui_sub {
             return false;
         }
         if (!checkSelfContained(profile, error)) return false;
+        for (const auto &rule : overrides.technicalRules + overrides.localRules) {
+            if (rule.trimmed().isEmpty()) {
+                error = QStringLiteral("Runtime rule overrides must be nonempty");
+                return false;
+            }
+        }
         try {
             auto root = YAML::Load(profile.source.toStdString());
             if (!reviewedNestedOptions(root)) {
-                error = QStringLiteral("Nested options are outside the initial SOCKS/select runtime contract");
+                error = QStringLiteral("Proxy options are outside the reviewed loopback SOCKS5/HTTP or VLESS REALITY Vision TCP contract");
                 return false;
             }
             const QSet<QString> allowed{
@@ -77,6 +134,13 @@ namespace NekoGui_sub {
                 }
             }
             // Retain panel routing/proxy/DNS semantics; only own local runtime controls.
+            if (!overrides.technicalRules.isEmpty() || !overrides.localRules.isEmpty()) {
+                YAML::Node rules(YAML::NodeType::Sequence);
+                for (const auto &rule : overrides.technicalRules) rules.push_back(rule.toStdString());
+                for (const auto &rule : overrides.localRules) rules.push_back(rule.toStdString());
+                for (const auto &rule : root["rules"]) rules.push_back(rule);
+                root["rules"] = rules;
+            }
             root["mixed-port"] = mixedPort;
             root["port"] = 0;
             root["socks-port"] = 0;
